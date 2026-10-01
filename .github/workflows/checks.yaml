@@ -12,6 +12,8 @@ on:
 jobs:
   fmt-crank-check-test:
     name: Format + check
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -40,6 +42,8 @@ jobs:
 
   tests:
     name: Run tests
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -64,6 +68,8 @@ jobs:
 
   check-stale-generated-contents:
     name: Check whether some generated contents are stale
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -84,6 +90,8 @@ jobs:
 
   check-openfx-submodule-main-or-ancestor:
     name: Check whether the openfx submodule is on main or an ancestor of main
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
