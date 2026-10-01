@@ -1,0 +1,3 @@
+[submodule "test-fixtures/openfx"]
+	path = test-fixtures/openfx
+	url = https://github.com/AcademySoftwareFoundation/openfx
