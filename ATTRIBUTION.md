@@ -1,7 +1,7 @@
 > [!NOTE]
 >
 > Licenses for third-party dependencies managed by tools such as [`cargo`] and
-> GitHub Actions.
+> GitHub Actions are not included here.
 
 [`cargo`]: https://github.com/rust-lang/cargo
 
