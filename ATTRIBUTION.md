@@ -1,6 +1,7 @@
 > [!NOTE]
 >
-> Licenses for third-party dependencies managed by tools such as [`cargo`].
+> Licenses for third-party dependencies managed by tools such as [`cargo`] and
+> GitHub Actions.
 
 [`cargo`]: https://github.com/rust-lang/cargo
 
@@ -42,6 +43,10 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ## OpenImageIO
 
 [link](https://github.com/AcademySoftwareFoundation/OpenImageIO/blob/138c71f2380e7167597c6f5036084529204819c9/LICENSE.md)
+
+For:
+
+- [AI_POLICY.md](./AI_POLICY.md)
 
 ```
                                  Apache License
@@ -245,4 +250,40 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+```
+
+## egui
+
+[link](https://github.com/emilk/egui/blob/6b420bc1b11cd4f37d5db6b5e0a2e369f259dd35/LICENSE-MIT)
+
+For:
+
+- [.github/workflows/checks.yaml](./.github/workflows/checks.yaml)
+
+```
+Copyright (c) 2018-2021 Emil Ernerfeldt <emil.ernerfeldt@gmail.com>
+
+Permission is hereby granted, free of charge, to any
+person obtaining a copy of this software and associated
+documentation files (the "Software"), to deal in the
+Software without restriction, including without
+limitation the rights to use, copy, modify, merge,
+publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software
+is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice
+shall be included in all copies or substantial portions
+of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF
+ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED
+TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT
+SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
+IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+DEALINGS IN THE SOFTWARE.
 ```
