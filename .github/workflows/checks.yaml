@@ -21,6 +21,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.98.1
+          components: rustfmt, clippy
 
       - name: Set up cargo cache
         uses: Swatinem/rust-cache@v2
