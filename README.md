@@ -12,3 +12,14 @@ headers[^1].
 
 [^1]: They are usually located under the `/include` folder in the
     [official repo].
+
+## Prerequisites
+
+The following tools are required:
+
+| Tool(s)                                 | Run tests | Updating Generated Schemata |
+| --------------------------------------- | --------- | --------------------------- |
+| POSIX tools (`sh`, `rm`, `mkdir`, etc.) | no        | not strictly required       |
+| [`just`]                                | no        | not strictly required       |
+
+[`just`]: https://github.com/casey/just

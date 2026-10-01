@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, path::PathBuf};
 
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use rayon::iter::{IntoParallelRefIterator as _, ParallelIterator as _};
 
 use openfx_datagen::{
@@ -8,8 +8,20 @@ use openfx_datagen::{
     processing::{Bindings, process},
 };
 
-#[derive(Parser, Debug)]
+#[derive(Debug, Parser)]
 struct Args {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Debug, Subcommand)]
+enum Commands {
+    GenData(CommandGenData),
+    GenSchemata(CommandGenSchemata),
+}
+
+#[derive(Debug, Parser)]
+struct CommandGenData {
     /// the path to the input C headers directory
     #[arg(long)]
     input_c_headers: PathBuf,
@@ -19,13 +31,27 @@ struct Args {
     output_data: PathBuf,
 }
 
+#[derive(Debug, Parser)]
+struct CommandGenSchemata {
+    /// the path to the output directory for generated schemata
+    #[arg(long)]
+    output_schemata: PathBuf,
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     tracing_subscriber::fmt::init();
 
     let args = Args::parse();
 
+    match args.command {
+        Commands::GenData(cmd) => gen_data(cmd),
+        Commands::GenSchemata(cmd) => gen_schemata(cmd),
+    }
+}
+
+fn gen_data(cmd: CommandGenData) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut input_entries: Vec<(std::fs::DirEntry, String)> = vec![];
-    for entry in std::fs::read_dir(&args.input_c_headers)? {
+    for entry in std::fs::read_dir(&cmd.input_c_headers)? {
         let entry = entry?;
         let path = entry.path();
         if !entry.file_type()?.is_file() || path.extension().is_none_or(|ext| ext != "h") {
@@ -58,10 +84,8 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     let processed_bindings = process(parsed_headers)?;
 
-    let output_bindings_path = args.output_data.join("bindings");
+    let output_bindings_path = cmd.output_data.join("bindings");
     std::fs::create_dir_all(&output_bindings_path)?;
-    let output_schemata_path = args.output_data.join("schemata");
-    std::fs::create_dir_all(&output_schemata_path)?;
 
     processed_bindings.par_iter().try_for_each(
         |(name, items)| -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -73,6 +97,13 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         },
     )?;
 
+    Ok(())
+}
+
+fn gen_schemata(cmd: CommandGenSchemata) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let output_schemata_path = cmd.output_schemata;
+    std::fs::create_dir_all(&output_schemata_path)?;
+
     let schema_generator = schemars::generate::SchemaSettings::default()
         .with_transform(schemars::transform::RecursiveTransform(
             |s: &mut schemars::Schema| {
@@ -82,7 +113,7 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         .into_generator();
 
     let bindings_schema = schema_generator.into_root_schema_for::<Bindings>();
-    let output_bindings_schema_path = output_schemata_path.join("bindings.schema.json");
+    let output_bindings_schema_path = output_schemata_path.join("bindings.current.schema.json");
     let file = std::fs::File::create(&output_bindings_schema_path)?;
     serde_json::to_writer_pretty(file, &bindings_schema)?;
 
