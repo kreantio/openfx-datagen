@@ -81,3 +81,19 @@ jobs:
 
       - name: Detect stale generated contents
         run: just detect-stale-generated-contents
+
+  check-openfx-submodule-main-or-ancestor:
+    name: Check whether the openfx submodule is on main or an ancestor of main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - name: Check Submodule Name
+        uses: jtmullen/submodule-branch-check-action@v1
+        with:
+          path: test-fixtures/openfx
+          branch: main
+          first_parent: true
+          disable_progression: true
