@@ -210,3 +210,69 @@ fn topological_sort(
 
     Ok(ordered)
 }
+
+#[cfg(test)]
+mod tests {
+
+    use super::*;
+
+    #[test]
+    fn test_write_schema_json_pretty_being_stable() {
+        let mut first_result: Option<String> = None;
+
+        for _ in 0..10 {
+            let mut buffer = Vec::new();
+            Bindings::write_schema_json_pretty(&mut buffer).unwrap();
+            let result = String::from_utf8(buffer).unwrap();
+            if let Some(first) = &first_result {
+                assert_eq!(first, &result);
+            } else {
+                first_result = Some(result);
+            }
+        }
+    }
+
+    #[test]
+    fn test_write_json_pretty_being_stable() -> Result<(), Box<dyn std::error::Error + Send + Sync>>
+    {
+        use rayon::iter::IntoParallelRefIterator as _;
+        use rayon::iter::ParallelIterator as _;
+
+        let input_entries = crate::test_fixtures::real_c_headers::ALL;
+
+        let parsed_headers: BTreeMap<_, _> = input_entries
+            .par_iter()
+            .map(
+                |(name, code)| -> Result<
+                    (String, BindingsUnprocessed),
+                    Box<dyn std::error::Error + Send + Sync>,
+                > {
+                    Ok((name.to_owned().to_owned(), crate::parsing::parse(code)?))
+                },
+            )
+            .collect::<Result<BTreeMap<_, _>, _>>()?;
+
+        let processed_bindings = process(parsed_headers)?;
+
+        fn test_single(bindings: &Bindings) {
+            let mut first_result: Option<String> = None;
+
+            for _ in 0..10 {
+                let mut buffer = Vec::new();
+                bindings.write_json_pretty(&mut buffer).unwrap();
+                let result = String::from_utf8(buffer).unwrap();
+                if let Some(first) = &first_result {
+                    assert_eq!(first, &result);
+                } else {
+                    first_result = Some(result);
+                }
+            }
+        }
+
+        for bindings in processed_bindings.values() {
+            test_single(bindings);
+        }
+
+        Ok(())
+    }
+}

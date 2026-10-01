@@ -149,6 +149,32 @@ pub mod real_c_headers {
         };
     }
 
+    pub(crate) static ALL: &[(&str, &str)] = &[
+        ("ofxColour.h", OFX_COLOUR),
+        ("ofxCore.h", OFX_CORE),
+        ("ofxDialog.h", OFX_DIALOG),
+        ("ofxDrawSuite.h", OFX_DRAW_SUITE),
+        ("ofxGPURender.h", OFX_GPU_RENDER),
+        ("ofxImageEffect.h", OFX_IMAGE_EFFECT),
+        ("ofxInteract.h", OFX_INTERACT),
+        ("ofxKeySyms.h", OFX_KEY_SYMS),
+        ("ofxMemory.h", OFX_MEMORY),
+        ("ofxMessage.h", OFX_MESSAGE),
+        ("ofxMultiThread.h", OFX_MULTI_THREAD),
+        ("ofxOld.h", OFX_OLD),
+        ("ofxOpenGLRender.h", OFX_OPENGL_RENDER),
+        ("ofxParam.h", OFX_PARAM),
+        ("ofxParametricParam.h", OFX_PARAMETRIC_PARAM),
+        ("ofxPixels.h", OFX_PIXELS),
+        ("ofxProgress.h", OFX_PROGRESS),
+        ("ofxProperty.h", OFX_PROPERTY),
+        ("ofxTimeLine.h", OFX_TIME_LINE),
+        (
+            "ofx-native-v1.5_aces-v1.3_ocio-v2.3.h",
+            OFX_DEFAULT_COLORSPACE,
+        ),
+    ];
+
     pub(crate) use make_test_real_file;
     pub(crate) use make_test_real_files;
 }
