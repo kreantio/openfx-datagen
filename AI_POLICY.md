@@ -3,7 +3,7 @@
 > [!NOTE]
 > This policy is adapted from the [OpenImageIO Policy on AI Coding Assistants],
 > which likewise served as the basis for the version [adapted by OpenFX]. See
-> [Attribution.md](./ATTRIBUTION.md#openimageio) for attribution details.
+> [ATTRIBUTION.md](./ATTRIBUTION.md#openimageio) for attribution details.
 
 Use of "AI coding assistants" is permitted on this project, with the following
 guidelines and principles.
