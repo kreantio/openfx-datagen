@@ -25,8 +25,6 @@ treesitter-types-c = "=1.0.0"
 name = "cli"
 path = "src/bin/cli.rs"
 
-[lints]
-workspace = true
 
 [dev-dependencies]
 pretty_assertions = "=0.3.0"
