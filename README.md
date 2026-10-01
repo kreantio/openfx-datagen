@@ -1,5 +1,7 @@
 # `openfx-datagen`
 
+This is a subproject of [`openfx-rs`].
+
 See Also:
 
 - [AI_POLICY.md](./AI_POLICY.md)
@@ -22,4 +24,5 @@ The following tools are required:
 | POSIX tools (`sh`, `rm`, `mkdir`, etc.) | no        | not strictly              |
 | [`just`]                                | no        | not strictly              |
 
+[`openfx-rs`]: https://github.com/kreantio/openfx-rs
 [`just`]: https://github.com/casey/just
