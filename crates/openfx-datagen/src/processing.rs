@@ -43,6 +43,32 @@ pub struct Bindings {
     pub items: Vec<RootItemWithCommentAbove>,
 }
 
+impl Bindings {
+    pub fn write_json_pretty<W: std::io::Write>(
+        &self,
+        writer: W,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        serde_json::to_writer_pretty(writer, self)?;
+        Ok(())
+    }
+
+    pub fn write_schema_json_pretty<W: std::io::Write>(
+        writer: W,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let schema_generator = schemars::generate::SchemaSettings::default()
+            .with_transform(schemars::transform::RecursiveTransform(
+                |s: &mut schemars::Schema| {
+                    s.remove("description");
+                },
+            ))
+            .into_generator();
+
+        let bindings_schema = schema_generator.into_root_schema_for::<Bindings>();
+        serde_json::to_writer_pretty(writer, &bindings_schema)?;
+        Ok(())
+    }
+}
+
 /// Keys should be header file names with `.h`.
 pub fn process(
     input: BTreeMap<String, BindingsUnprocessed>,

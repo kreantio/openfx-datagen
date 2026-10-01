@@ -88,10 +88,10 @@ fn gen_data(cmd: CommandGenData) -> Result<(), Box<dyn std::error::Error + Send 
     std::fs::create_dir_all(&output_bindings_path)?;
 
     processed_bindings.par_iter().try_for_each(
-        |(name, items)| -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        |(name, bindings)| -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             let output_path = output_bindings_path.join(format!("{}.json", name));
             let file = std::fs::File::create(&output_path)?;
-            serde_json::to_writer_pretty(file, items)?;
+            bindings.write_json_pretty(file)?;
 
             Ok(())
         },
@@ -103,19 +103,9 @@ fn gen_data(cmd: CommandGenData) -> Result<(), Box<dyn std::error::Error + Send 
 fn gen_schemata(cmd: CommandGenSchemata) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let output_schemata_path = cmd.output_schemata;
     std::fs::create_dir_all(&output_schemata_path)?;
-
-    let schema_generator = schemars::generate::SchemaSettings::default()
-        .with_transform(schemars::transform::RecursiveTransform(
-            |s: &mut schemars::Schema| {
-                s.remove("description");
-            },
-        ))
-        .into_generator();
-
-    let bindings_schema = schema_generator.into_root_schema_for::<Bindings>();
     let output_bindings_schema_path = output_schemata_path.join("bindings.current.schema.json");
     let file = std::fs::File::create(&output_bindings_schema_path)?;
-    serde_json::to_writer_pretty(file, &bindings_schema)?;
+    Bindings::write_schema_json_pretty(file)?;
 
     Ok(())
 }
