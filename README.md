@@ -17,9 +17,9 @@ headers[^1].
 
 The following tools are required:
 
-| Tool(s)                                 | Run tests | Updating Generated Schemata |
-| --------------------------------------- | --------- | --------------------------- |
-| POSIX tools (`sh`, `rm`, `mkdir`, etc.) | no        | not strictly required       |
-| [`just`]                                | no        | not strictly required       |
+| Tool(s) \\ To                           | Run tests | Update Generated Schemata |
+| --------------------------------------- | --------- | ------------------------- |
+| POSIX tools (`sh`, `rm`, `mkdir`, etc.) | no        | not strictly              |
+| [`just`]                                | no        | not strictly              |
 
 [`just`]: https://github.com/casey/just
