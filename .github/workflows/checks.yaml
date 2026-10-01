@@ -59,3 +59,25 @@ jobs:
       - name: Run doc-tests
         if: always()
         run: cargo test --all-features --doc --no-fail-fast
+
+  # ---------------------------------------------------------------------------
+
+  check-stale-generated-contents:
+    name: Check whether some generated contents are stale
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.1
+
+      - uses: extractions/setup-just@v4
+
+      - name: Set up cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Detect stale generated contents
+        run: just detect-stale-generated-contents
