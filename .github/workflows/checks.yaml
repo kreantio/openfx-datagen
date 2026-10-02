@@ -85,8 +85,14 @@ jobs:
       - name: Set up cargo cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Detect stale generated contents
-        run: just detect-stale-generated-contents
+      - name: Detect stale generated schemata
+        run: just detect-stale-generated-schemata
+
+      - name: Detect stale generated reference bindings
+        if: always()
+        run: just detect-stale-generated-reference-bindings
+
+  # ---------------------------------------------------------------------------
 
   check-openfx-submodule-main-or-ancestor:
     name: Check whether the openfx submodule is on main or an ancestor of main
