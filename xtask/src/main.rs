@@ -1,3 +1,5 @@
+mod bindings_comparison;
+
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
@@ -6,6 +8,8 @@ use std::{
 use clap::Parser;
 use sha2::Digest as _;
 
+use crate::bindings_comparison::compare_generated_bindings;
+
 #[derive(clap::Parser)]
 struct Cli {
     #[clap(subcommand)]
@@ -13,9 +17,11 @@ struct Cli {
 }
 
 #[derive(clap::Subcommand)]
+#[allow(clippy::enum_variant_names)]
 enum Commands {
     GenerateReferenceBindings(CommandGenerateReferenceBindings),
     DetectStaleGeneratedReferenceBindings(DetectStaleGeneratedReferenceBindings),
+    CompareGeneratedBindings(CompareGeneratedBindings),
 }
 
 #[derive(clap::Parser)]
@@ -38,6 +44,16 @@ struct DetectStaleGeneratedReferenceBindings {
     bindings: PathBuf,
 }
 
+#[derive(clap::Parser)]
+struct CompareGeneratedBindings {
+    #[clap(long)]
+    config: PathBuf,
+    #[clap(long)]
+    openfx_bindgen_bindings_folder: PathBuf,
+    #[clap(long)]
+    reference_bindings_file: PathBuf,
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
@@ -48,6 +64,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Commands::DetectStaleGeneratedReferenceBindings(cmd) => {
             detect_stale_generated_reference_bindings(cmd)?
         }
+        Commands::CompareGeneratedBindings(cmd) => compare_generated_bindings(cmd)?,
     }
 
     Ok(())

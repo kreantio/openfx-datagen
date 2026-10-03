@@ -18,7 +18,7 @@ pub fn load_input_data(
 
     let mut name_to_file_name = HashMap::new();
 
-    for entry in std::fs::read_dir(input_data_folder.join("generated/bindings"))? {
+    for entry in std::fs::read_dir(input_data_folder)? {
         let entry = entry?;
         let path = entry.path();
         if !entry.file_type()?.is_file()

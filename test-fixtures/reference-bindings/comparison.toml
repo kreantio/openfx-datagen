@@ -1,0 +1,4 @@
+[preprocessing.reference_bindings]
+rename_const = [
+  { pattern = '^Ofx([a-zA-Z\d]+?)_(kOfx\1[a-zA-Z\d]+)$', replacement = '$2' },
+]

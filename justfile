@@ -26,3 +26,20 @@ generate-reference-bindings:
 detect-stale-generated-reference-bindings:
     cd test-fixtures/reference-bindings && cargo xtask detect-stale-generated-reference-bindings \
         --wrapper ./wrapper.h --submodule ../openfx --bindings ./generated/bindings.rs
+
+compare-generated-bindings-against-reference-bindings:
+    rm -rf test-fixtures/tmp/our-bindings test-fixtures/tmp/data
+    mkdir -p test-fixtures/tmp/our-bindings test-fixtures/tmp/data
+
+    cargo run --package openfx-datagen --bin cli -- gen-data \
+        --input-c-headers ./test-fixtures/openfx/include \
+        --output-data ./test-fixtures/tmp/data
+
+    cargo run --package openfx-bindgen --bin cli -- \
+        --input-data ./test-fixtures/tmp/data/bindings \
+        --output ./test-fixtures/tmp/our-bindings
+
+    cargo xtask compare-generated-bindings \
+        --config ./test-fixtures/reference-bindings/comparison.toml \
+        --openfx-bindgen-bindings-folder ./test-fixtures/tmp/our-bindings \
+        --reference-bindings-file test-fixtures/reference-bindings/generated/bindings.rs
