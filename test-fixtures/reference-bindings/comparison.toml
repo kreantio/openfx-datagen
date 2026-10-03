@@ -2,3 +2,6 @@
 rename_const = [
   { pattern = '^Ofx([a-zA-Z\d]+?)_(kOfx\1[a-zA-Z\d]+)$', replacement = '$2' },
 ]
+
+[exceptions]
+our_const_bools_equal_to_u32_in_reference = true

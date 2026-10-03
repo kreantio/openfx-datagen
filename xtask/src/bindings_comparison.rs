@@ -4,46 +4,57 @@ use std::{
     path::Path,
 };
 
-use serde::Deserialize as _;
-
 use crate::{
     CompareGeneratedBindings,
     bindings_comparison::{
-        struct_comparison::StructComparisonResult, type_comparison::TypeComparisonResult,
+        const_comparison::ConstComparisonResult, struct_comparison::StructComparisonResult,
+        type_comparison::TypeComparisonResult,
     },
 };
 
-#[derive(serde::Deserialize)]
-struct Config {
-    preprocessing: ConfigPreprocessing,
+mod config {
+    use serde::Deserialize as _;
+
+    #[derive(serde::Deserialize)]
+    pub struct Config {
+        pub preprocessing: ConfigPreprocessing,
+        pub exceptions: ConfigExceptions,
+    }
+
+    #[derive(serde::Deserialize)]
+    pub struct ConfigPreprocessing {
+        pub reference_bindings: ConfigPreprocessingReferenceBindings,
+    }
+
+    #[derive(serde::Deserialize)]
+    pub struct ConfigPreprocessingReferenceBindings {
+        pub rename_const: Vec<ConfigPreprocessingRename>,
+    }
+
+    #[derive(serde::Deserialize)]
+    pub struct ConfigPreprocessingRename {
+        #[serde(deserialize_with = "deserialize_regex")]
+        pub pattern: regress::Regex,
+        pub replacement: String,
+    }
+
+    fn deserialize_regex<'de, D>(deserializer: D) -> Result<regress::Regex, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let text = String::deserialize(deserializer)?;
+        let re = regress::Regex::new(&text).map_err(serde::de::Error::custom)?;
+
+        Ok(re)
+    }
+
+    #[derive(serde::Deserialize)]
+    pub struct ConfigExceptions {
+        pub our_const_bools_equal_to_u32_in_reference: bool,
+    }
 }
 
-#[derive(serde::Deserialize)]
-struct ConfigPreprocessing {
-    reference_bindings: ConfigPreprocessingReferenceBindings,
-}
-
-#[derive(serde::Deserialize)]
-struct ConfigPreprocessingReferenceBindings {
-    rename_const: Vec<ConfigPreprocessingRename>,
-}
-
-#[derive(serde::Deserialize)]
-struct ConfigPreprocessingRename {
-    #[serde(deserialize_with = "deserialize_regex")]
-    pattern: regress::Regex,
-    replacement: String,
-}
-
-fn deserialize_regex<'de, D>(deserializer: D) -> Result<regress::Regex, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let text = String::deserialize(deserializer)?;
-    let re = regress::Regex::new(&text).map_err(serde::de::Error::custom)?;
-
-    Ok(re)
-}
+pub use config::Config;
 
 pub fn compare_generated_bindings(
     cmd: CompareGeneratedBindings,
@@ -65,12 +76,11 @@ pub fn compare_generated_bindings(
 
     TypeComparisonResult::compare_types(&our_bindings, &ref_bindings).report(&mut has_problems);
     StructComparisonResult::compare_structs(&our_bindings, &ref_bindings).report(&mut has_problems);
+    ConstComparisonResult::compare_consts(&config, &our_bindings, &ref_bindings)
+        .report(&mut has_problems);
 
-    todo!();
-
-    #[allow(unreachable_code)]
     if has_problems {
-        Err("Some problems were found. (See logs.)".into())
+        Err("Some problems were found. (See tracing logs.)".into())
     } else {
         Ok(())
     }
@@ -472,6 +482,7 @@ mod type_comparison {
             result.our_unique_name_count = our_names.difference(&shared_names).cloned().collect();
             let reference_unique_names: BTreeSet<_> =
                 reference_names.difference(&shared_names).cloned().collect();
+            let shared_names: BTreeSet<_> = shared_names.into_iter().collect();
 
             result.shared_name_count = shared_names.len();
 
@@ -604,6 +615,7 @@ mod struct_comparison {
             result.our_unique_name_count = our_names.difference(&shared_names).cloned().collect();
             let reference_unique_names: BTreeSet<_> =
                 reference_names.difference(&shared_names).cloned().collect();
+            let shared_names: BTreeSet<_> = shared_names.into_iter().collect();
 
             result.shared_name_count = shared_names.len();
 
@@ -692,6 +704,186 @@ mod struct_comparison {
             for (name, diff) in &self.different_structs {
                 tracing::error!(
                     "compare_structs: `struct` `{}` differs between our bindings and the reference bindings: \n{}",
+                    name,
+                    &prettydiff::diff_lines(&diff.reference, &diff.ours,)
+                )
+            }
+        }
+    }
+}
+
+mod const_comparison {
+    use std::collections::{BTreeSet, HashSet};
+
+    use quote::quote;
+
+    use super::{Config, Difference, OurBindings, ReferenceBindings};
+
+    #[derive(Default)]
+    pub struct ConstComparisonResult {
+        problems: ConstComparisonProblems,
+
+        shared_name_count: usize,
+        our_unique_name_count: BTreeSet<String>,
+        same_const_count: usize,
+        exceptional_const_count: usize,
+
+        exception_our_const_bools_equal_to_u32_in_reference: BTreeSet<String>,
+    }
+
+    #[derive(Default)]
+    pub struct ConstComparisonProblems {
+        reference_unique_names: BTreeSet<String>,
+        different_consts: Vec<(String, Difference)>,
+    }
+
+    impl ConstComparisonResult {
+        pub fn compare_consts(
+            config: &Config,
+            ours: &OurBindings,
+            reference: &ReferenceBindings,
+        ) -> Self {
+            let mut result = ConstComparisonResult::default();
+
+            let our_names: HashSet<_> = ours.consts.keys().cloned().collect();
+            let reference_names: HashSet<_> = reference.consts.keys().cloned().collect();
+
+            let shared_names: HashSet<_> =
+                our_names.intersection(&reference_names).cloned().collect();
+            result.our_unique_name_count = our_names.difference(&shared_names).cloned().collect();
+            let reference_unique_names: BTreeSet<_> =
+                reference_names.difference(&shared_names).cloned().collect();
+            let shared_names: BTreeSet<_> = shared_names.into_iter().collect();
+
+            result.shared_name_count = shared_names.len();
+
+            if !reference_unique_names.is_empty() {
+                tracing::info!(
+                    "compare_consts: {} `const`s are unique to the reference bindings (which means they are missing in our bindings, which is not OK).",
+                    reference_unique_names.len()
+                );
+                result.problems.reference_unique_names = reference_unique_names;
+            }
+
+            for name in shared_names {
+                let our_const = &ours.consts[&name];
+                let ref_const = &reference.consts[&name];
+                let ours = Self::stringify_const(our_const);
+                let reference = Self::stringify_const(ref_const);
+
+                // NOTE: comparing syn types directly might result in false negatives.
+                if ours == reference {
+                    result.same_const_count += 1;
+                    continue;
+                }
+
+                if config.exceptions.our_const_bools_equal_to_u32_in_reference {
+                    let our_ty = &our_const.ty;
+                    if quote! { #our_ty }.to_string() == "bool" {
+                        let our_expr = &our_const.expr;
+
+                        let mut our_const = our_const.clone();
+                        our_const.ty = syn::parse_str("u32").unwrap();
+                        our_const.expr = match quote! { #our_expr }.to_string().as_str() {
+                            "false" => syn::parse_str("0").unwrap(),
+                            "true" => syn::parse_str("1").unwrap(),
+                            _ => our_expr.clone(),
+                        };
+
+                        let ours = Self::stringify_const(&our_const);
+
+                        if ours == reference {
+                            result.exceptional_const_count += 1;
+                            result
+                                .exception_our_const_bools_equal_to_u32_in_reference
+                                .insert(name.clone());
+                            continue;
+                        }
+                    }
+                }
+
+                result
+                    .problems
+                    .different_consts
+                    .push((name.clone(), Difference { ours, reference }));
+            }
+
+            result
+        }
+
+        pub fn report(&self, has_problems: &mut bool) {
+            tracing::info!(
+                "compare_consts: {} `const`s shares the same name. ({} of them have the same definition; {} of them are different but allowed exceptionally.)",
+                self.shared_name_count,
+                self.same_const_count,
+                self.exceptional_const_count
+            );
+            if !self.our_unique_name_count.is_empty() {
+                tracing::info!(
+                    "compare_consts: {} `const`s are unique to our bindings (which is OK). They are: {}",
+                    self.our_unique_name_count.len(),
+                    self.our_unique_name_count
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+            if !self
+                .exception_our_const_bools_equal_to_u32_in_reference
+                .is_empty()
+            {
+                tracing::info!(
+                    "compare_consts: {} `const`s that differ from the reference are allowed under the exception `our_const_bools_equal_to_u32_in_reference`. They are: {}",
+                    self.exception_our_const_bools_equal_to_u32_in_reference
+                        .len(),
+                    self.exception_our_const_bools_equal_to_u32_in_reference
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+
+            self.problems.report_problems_if_any(has_problems);
+        }
+
+        fn stringify_const(s: &syn::ItemConst) -> String {
+            prettyplease::unparse(&syn::File {
+                shebang: None,
+                frontmatter: None,
+                attrs: vec![],
+                items: vec![syn::Item::Const(s.clone())],
+            })
+        }
+    }
+
+    impl ConstComparisonProblems {
+        fn is_empty(&self) -> bool {
+            self.reference_unique_names.is_empty() && self.different_consts.is_empty()
+        }
+
+        fn report_problems_if_any(&self, has_problems: &mut bool) {
+            if self.is_empty() {
+                return;
+            }
+
+            *has_problems = true;
+
+            if !self.reference_unique_names.is_empty() {
+                tracing::error!(
+                    "compare_consts: `const`s that are missing in our bindings: {}",
+                    self.reference_unique_names
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+
+            for (name, diff) in &self.different_consts {
+                tracing::error!(
+                    "compare_consts: `const` `{}` differs between our bindings and the reference bindings: \n{}",
                     name,
                     &prettydiff::diff_lines(&diff.reference, &diff.ours,)
                 )
