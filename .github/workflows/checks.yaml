@@ -66,6 +66,30 @@ jobs:
 
   # ---------------------------------------------------------------------------
 
+  compare-generated-bindings-against-reference-bindings:
+    name: Compare generated bindings against reference bindings
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.1
+
+      - uses: extractions/setup-just@v4
+
+      - name: Set up cargo cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Compare generated bindings against reference bindings
+        run: just compare-generated-bindings-against-reference-bindings
+
+  # ---------------------------------------------------------------------------
+
   check-stale-generated-contents:
     name: Check whether some generated contents are stale
     permissions:
@@ -85,8 +109,14 @@ jobs:
       - name: Set up cargo cache
         uses: Swatinem/rust-cache@v2
 
-      - name: Detect stale generated contents
-        run: just detect-stale-generated-contents
+      - name: Detect stale generated schemata
+        run: just detect-stale-generated-schemata
+
+      - name: Detect stale generated reference bindings
+        if: always()
+        run: just detect-stale-generated-reference-bindings
+
+  # ---------------------------------------------------------------------------
 
   check-openfx-submodule-main-or-ancestor:
     name: Check whether the openfx submodule is on main or an ancestor of main
