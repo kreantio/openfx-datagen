@@ -169,7 +169,7 @@ fn generate_bindings_one(
                     syn::Ident::new(pointee_struct_name, proc_macro2::Span::call_site());
                 output.extend(quote! {
                     #[repr(C)]
-                    #[derive(Debug, Copy, Clone)]
+                    #[derive(Debug)]
                     pub struct #pointee_struct_name {
                         _unused: [u8; 0],
                     }

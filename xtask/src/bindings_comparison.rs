@@ -6,7 +6,12 @@ use std::{
 
 use serde::Deserialize as _;
 
-use crate::CompareGeneratedBindings;
+use crate::{
+    CompareGeneratedBindings,
+    bindings_comparison::{
+        struct_comparison::StructComparisonResult, type_comparison::TypeComparisonResult,
+    },
+};
 
 #[derive(serde::Deserialize)]
 struct Config {
@@ -58,7 +63,10 @@ pub fn compare_generated_bindings(
 
     ref_bindings.report(&mut has_problems);
 
-    return Err("TODO".into());
+    TypeComparisonResult::compare_types(&our_bindings, &ref_bindings).report(&mut has_problems);
+    StructComparisonResult::compare_structs(&our_bindings, &ref_bindings).report(&mut has_problems);
+
+    todo!();
 
     #[allow(unreachable_code)]
     if has_problems {
@@ -360,12 +368,15 @@ impl ReferenceBindings {
             "reference bindings: ignored {} other items.",
             self.ignored_type_count
         );
-        tracing::info!(
-            "reference bindings: renamed `const`s (from => to): {:?}",
-            self.renamed_consts
-        );
+        if !self.renamed_consts.is_empty() {
+            tracing::info!(
+                r#"reference bindings: renamed {} `const`s ("<real_name>": "<seen_as>"): {:?}"#,
+                self.renamed_consts.len(),
+                self.renamed_consts
+            );
+        }
 
-        self.problems.report(has_problems);
+        self.problems.report_problems_if_any(has_problems);
     }
 
     fn rename_const(&mut self, config: &Config, name: &str) -> Option<String> {
@@ -390,10 +401,12 @@ impl ReferenceBindingsProblems {
             && self.unexpected_other_names.is_empty()
     }
 
-    fn report(&self, has_problems: &mut bool) {
-        if !self.is_empty() {
-            *has_problems = true;
+    fn report_problems_if_any(&self, has_problems: &mut bool) {
+        if self.is_empty() {
+            return;
         }
+
+        *has_problems = true;
 
         if !self.unexpected_const_names.is_empty() {
             tracing::error!(
@@ -418,6 +431,271 @@ impl ReferenceBindingsProblems {
                 r#"reference bindings: Unexpected names for other items (they should not start with `"Ofx" or "kOfx"`): {:?}"#,
                 self.unexpected_other_names
             );
+        }
+    }
+}
+
+struct Difference {
+    ours: String,
+    reference: String,
+}
+
+mod type_comparison {
+    use std::collections::{BTreeSet, HashSet};
+
+    use super::{Difference, OurBindings, ReferenceBindings};
+
+    #[derive(Default)]
+    pub struct TypeComparisonResult {
+        problems: TypeComparisonProblems,
+
+        shared_name_count: usize,
+        our_unique_name_count: BTreeSet<String>,
+        same_type_count: usize,
+    }
+
+    #[derive(Default)]
+    pub struct TypeComparisonProblems {
+        reference_unique_names: BTreeSet<String>,
+        different_types: Vec<(String, Difference)>,
+    }
+
+    impl TypeComparisonResult {
+        pub fn compare_types(ours: &OurBindings, reference: &ReferenceBindings) -> Self {
+            let mut result = TypeComparisonResult::default();
+
+            let our_names: HashSet<_> = ours.types.keys().cloned().collect();
+            let reference_names: HashSet<_> = reference.types.keys().cloned().collect();
+
+            let shared_names: HashSet<_> =
+                our_names.intersection(&reference_names).cloned().collect();
+            result.our_unique_name_count = our_names.difference(&shared_names).cloned().collect();
+            let reference_unique_names: BTreeSet<_> =
+                reference_names.difference(&shared_names).cloned().collect();
+
+            result.shared_name_count = shared_names.len();
+
+            if !reference_unique_names.is_empty() {
+                tracing::info!(
+                    "compare_types: {} `type`s are unique to the reference bindings (which means they are missing in our bindings, which is not OK).",
+                    reference_unique_names.len()
+                );
+                result.problems.reference_unique_names = reference_unique_names;
+            }
+
+            for name in shared_names {
+                let our_type = &ours.types[&name];
+                let ref_type = &reference.types[&name];
+                let ours = Self::stringify_type(our_type);
+                let reference = Self::stringify_type(ref_type);
+
+                // NOTE: comparing syn types directly might result in false negatives.
+                if ours == reference {
+                    result.same_type_count += 1;
+                } else {
+                    result
+                        .problems
+                        .different_types
+                        .push((name.clone(), Difference { ours, reference }));
+                }
+            }
+
+            result
+        }
+
+        pub fn report(&self, has_problems: &mut bool) {
+            tracing::info!(
+                "compare_types: {} `type`s shares the same name. ({} of them have the same definition.)",
+                self.shared_name_count,
+                self.same_type_count
+            );
+            if !self.our_unique_name_count.is_empty() {
+                tracing::info!(
+                    "compare_types: {} `type`s are unique to our bindings (which is OK). They are: {}",
+                    self.our_unique_name_count.len(),
+                    self.our_unique_name_count
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+
+            self.problems.report_problems_if_any(has_problems);
+        }
+
+        fn stringify_type(ty: &syn::ItemType) -> String {
+            prettyplease::unparse(&syn::File {
+                shebang: None,
+                frontmatter: None,
+                attrs: vec![],
+                items: vec![syn::Item::Type(ty.clone())],
+            })
+        }
+    }
+
+    impl TypeComparisonProblems {
+        fn is_empty(&self) -> bool {
+            self.reference_unique_names.is_empty() && self.different_types.is_empty()
+        }
+
+        fn report_problems_if_any(&self, has_problems: &mut bool) {
+            if self.is_empty() {
+                return;
+            }
+
+            *has_problems = true;
+
+            if !self.reference_unique_names.is_empty() {
+                tracing::error!(
+                    "compare_types: `type`s that are missing in our bindings: {}",
+                    self.reference_unique_names
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+
+            for (name, diff) in &self.different_types {
+                tracing::error!(
+                    "compare_types: `type` `{}` differs between our bindings and the reference bindings: \n{}",
+                    name,
+                    &prettydiff::diff_lines(&diff.reference, &diff.ours,)
+                )
+            }
+
+            if !self.different_types.is_empty() {
+                tracing::error!("compare_types: different `type` definition ")
+            }
+        }
+    }
+}
+
+mod struct_comparison {
+    use std::collections::{BTreeSet, HashSet};
+
+    use super::{Difference, OurBindings, ReferenceBindings};
+
+    #[derive(Default)]
+    pub struct StructComparisonResult {
+        problems: StructComparisonProblems,
+
+        shared_name_count: usize,
+        our_unique_name_count: BTreeSet<String>,
+        same_struct_count: usize,
+    }
+
+    #[derive(Default)]
+    pub struct StructComparisonProblems {
+        reference_unique_names: BTreeSet<String>,
+        different_structs: Vec<(String, Difference)>,
+    }
+
+    impl StructComparisonResult {
+        pub fn compare_structs(ours: &OurBindings, reference: &ReferenceBindings) -> Self {
+            let mut result = StructComparisonResult::default();
+
+            let our_names: HashSet<_> = ours.structs.keys().cloned().collect();
+            let reference_names: HashSet<_> = reference.structs.keys().cloned().collect();
+
+            let shared_names: HashSet<_> =
+                our_names.intersection(&reference_names).cloned().collect();
+            result.our_unique_name_count = our_names.difference(&shared_names).cloned().collect();
+            let reference_unique_names: BTreeSet<_> =
+                reference_names.difference(&shared_names).cloned().collect();
+
+            result.shared_name_count = shared_names.len();
+
+            if !reference_unique_names.is_empty() {
+                tracing::info!(
+                    "compare_structs: {} `struct`s are unique to the reference bindings (which means they are missing in our bindings, which is not OK).",
+                    reference_unique_names.len()
+                );
+                result.problems.reference_unique_names = reference_unique_names;
+            }
+
+            for name in shared_names {
+                let our_struct = &ours.structs[&name];
+                let ref_struct = &reference.structs[&name];
+                let ours = Self::stringify_struct(our_struct);
+                let reference = Self::stringify_struct(ref_struct);
+
+                // NOTE: comparing syn types directly might result in false negatives.
+                if ours == reference {
+                    result.same_struct_count += 1;
+                } else {
+                    result
+                        .problems
+                        .different_structs
+                        .push((name.clone(), Difference { ours, reference }));
+                }
+            }
+
+            result
+        }
+
+        pub fn report(&self, has_problems: &mut bool) {
+            tracing::info!(
+                "compare_structs: {} `struct`s shares the same name. ({} of them have the same definition.)",
+                self.shared_name_count,
+                self.same_struct_count
+            );
+            if !self.our_unique_name_count.is_empty() {
+                tracing::info!(
+                    "compare_structs: {} `struct`s are unique to our bindings (which is OK). They are: {}",
+                    self.our_unique_name_count.len(),
+                    self.our_unique_name_count
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+
+            self.problems.report_problems_if_any(has_problems);
+        }
+
+        fn stringify_struct(s: &syn::ItemStruct) -> String {
+            prettyplease::unparse(&syn::File {
+                shebang: None,
+                frontmatter: None,
+                attrs: vec![],
+                items: vec![syn::Item::Struct(s.clone())],
+            })
+        }
+    }
+
+    impl StructComparisonProblems {
+        fn is_empty(&self) -> bool {
+            self.reference_unique_names.is_empty() && self.different_structs.is_empty()
+        }
+
+        fn report_problems_if_any(&self, has_problems: &mut bool) {
+            if self.is_empty() {
+                return;
+            }
+
+            *has_problems = true;
+
+            if !self.reference_unique_names.is_empty() {
+                tracing::error!(
+                    "compare_structs: `struct`s that are missing in our bindings: {}",
+                    self.reference_unique_names
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+
+            for (name, diff) in &self.different_structs {
+                tracing::error!(
+                    "compare_structs: `struct` `{}` differs between our bindings and the reference bindings: \n{}",
+                    name,
+                    &prettydiff::diff_lines(&diff.reference, &diff.ours,)
+                )
+            }
         }
     }
 }

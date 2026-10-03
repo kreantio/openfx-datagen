@@ -55,7 +55,9 @@ struct CompareGeneratedBindings {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt()
+        .with_ansi_sanitization(false) // for `prettydiff`
+        .init();
 
     let cli = Cli::parse();
 
@@ -131,25 +133,10 @@ fn detect_stale_generated_reference_bindings(
         return Ok(());
     }
 
-    let mut error_lines: Vec<String> =
-        vec!["Stale generated reference bindings detected:".to_owned()];
-
-    let diff = similar::TextDiff::from_lines(expected_first_lines, actual_first_lines);
-    let changes = diff.iter_all_changes().collect::<Vec<_>>();
-
-    for change in changes {
-        match change.tag() {
-            similar::ChangeTag::Delete => {
-                error_lines.push(format!("- expected: {}", change.value().trim_end()))
-            }
-            similar::ChangeTag::Insert => {
-                error_lines.push(format!("- current : {}", change.value().trim_end()))
-            }
-            similar::ChangeTag::Equal => (),
-        }
-    }
-
-    tracing::error!("{}", error_lines.join("\n"));
+    tracing::error!(
+        "Stale generated reference bindings detected:\n{}",
+        prettydiff::diff_lines(&expected_first_lines, &actual_first_lines)
+    );
 
     Err("Stale generated reference bindings detected.".into())
 }
