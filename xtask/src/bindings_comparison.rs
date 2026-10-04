@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, hash_map},
     hash::Hash,
+    io::Write as _,
     path::Path,
 };
 
@@ -8,7 +9,7 @@ use crate::{
     CompareGeneratedBindings,
     bindings_comparison::{
         const_comparison::ConstComparisonResult, struct_comparison::StructComparisonResult,
-        type_comparison::TypeComparisonResult,
+        syn_utils::Bindings, type_comparison::TypeComparisonResult,
     },
 };
 
@@ -201,6 +202,20 @@ impl OurBindings {
     }
 }
 
+impl Bindings for OurBindings {
+    fn consts(&self) -> &HashMap<String, syn::ItemConst> {
+        &self.consts
+    }
+
+    fn structs(&self) -> &HashMap<String, syn::ItemStruct> {
+        &self.structs
+    }
+
+    fn types(&self) -> &HashMap<String, syn::ItemType> {
+        &self.types
+    }
+}
+
 impl OurBindingsProblems {
     fn is_empty(&self) -> bool {
         self.unaddressed_items.is_empty()
@@ -381,6 +396,20 @@ impl ReferenceBindings {
         }
 
         None
+    }
+}
+
+impl Bindings for ReferenceBindings {
+    fn consts(&self) -> &HashMap<String, syn::ItemConst> {
+        &self.consts
+    }
+
+    fn structs(&self) -> &HashMap<String, syn::ItemStruct> {
+        &self.structs
+    }
+
+    fn types(&self) -> &HashMap<String, syn::ItemType> {
+        &self.types
     }
 }
 
@@ -696,9 +725,12 @@ mod struct_comparison {
 mod const_comparison {
     use std::collections::{BTreeSet, HashSet};
 
-    use quote::quote;
+    use quote::{ToTokens, quote};
 
-    use crate::bindings_comparison::syn_utils;
+    use crate::bindings_comparison::{
+        RustCompileError, compile_rust,
+        syn_utils::{self, Bindings as _},
+    };
 
     use super::{Config, Difference, OurBindings, ReferenceBindings};
 
@@ -713,6 +745,8 @@ mod const_comparison {
 
         under_rule_our_const_bools_equal_to_u32_in_reference: BTreeSet<String>,
         under_rule_try_resolve_our_const_value_idents: BTreeSet<String>,
+        under_rule_accept_if_const_assert_pass: BTreeSet<String>,
+        under_rule_accept_if_const_assert_as_i128_pass: BTreeSet<String>,
     }
 
     #[derive(Default)]
@@ -754,6 +788,11 @@ mod const_comparison {
                 let ref_const = &ref_bindings.consts[&name];
                 let ours = Self::stringify_const(our_const);
                 let reference = Self::stringify_const(ref_const);
+
+                let name_ident = &our_const.ident;
+                let name_str = name_ident.to_string();
+                let const_ty = &our_const.ty;
+                let ref_ty = &ref_const.ty;
 
                 // NOTE: comparing syn types directly might result in false negatives.
                 if ours == reference {
@@ -804,6 +843,107 @@ mod const_comparison {
                             .under_rule_try_resolve_our_const_value_idents
                             .insert(name.clone());
                         continue;
+                    }
+                }
+
+                if config.rules.accept_if_const_assert_pass.contains(&name_str) {
+                    let our_relevant_items = our_bindings
+                        .get_all_definition_items_of_item(&syn::Item::Const(our_const.clone()));
+                    let ref_relevant_items = ref_bindings
+                        .get_all_definition_items_of_item(&syn::Item::Const(ref_const.clone()));
+
+                    let code: syn::File = syn::parse2(
+                        quote! {
+                            mod ours { #(#our_relevant_items)* }
+                            mod reference { #(#ref_relevant_items)* }
+                            const _: () = assert!(ours::#name_ident == reference::#name_ident);
+                        }
+                        .into_token_stream(),
+                    )
+                    .unwrap();
+                    let code = prettyplease::unparse(&code);
+
+                    match compile_rust(&code) {
+                        Ok(_) => {
+                            result.accepted_by_rules_const_count += 1;
+                            result
+                                .under_rule_accept_if_const_assert_pass
+                                .insert(name.clone());
+                            continue;
+                        }
+                        Err(RustCompileError::CompileError { stderr }) => {
+                            tracing::warn!(
+                                "compare_consts: `const` {} failed the rule `accept_if_const_assert_pass`: {}",
+                                name_str,
+                                stderr
+                            );
+                        }
+                        Err(RustCompileError::Other(err)) => panic!("{err}"),
+                    }
+                }
+
+                if config
+                    .rules
+                    .accept_if_const_assert_as_i128_pass
+                    .contains(&name_str)
+                {
+                    let our_relevant_items = our_bindings
+                        .get_all_definition_items_of_item(&syn::Item::Const(our_const.clone()));
+                    let ref_relevant_items = ref_bindings
+                        .get_all_definition_items_of_item(&syn::Item::Const(ref_const.clone()));
+
+                    let ref_ty = if let Some(ty) = syn_utils::ty_try_as_ident(&ref_const.ty) {
+                        quote! { reference::#ty }
+                    } else {
+                        ref_ty.into_token_stream()
+                    };
+                    let const_ty = if let Some(ty) = syn_utils::ty_try_as_ident(&our_const.ty) {
+                        quote! { ours::#ty }
+                    } else {
+                        const_ty.into_token_stream()
+                    };
+
+                    let code: syn::File = syn::parse2(
+                        quote! {
+                            mod ours {
+                                #[allow(unused)]
+                                pub use std::primitive::*;
+                                #[allow(unused)]
+                                pub use std::ffi::*;
+                                #(#our_relevant_items)*
+                            }
+                            mod reference {
+                                #[allow(unused)]
+                                pub use std::primitive::*;
+                                #[allow(unused)]
+                                pub use std::ffi::*;
+                                #(#ref_relevant_items)*
+                            }
+                            const _: () = assert!(reference::#name_ident as i128 as #ref_ty == reference::#name_ident);
+                            const _: () = assert!(ours::#name_ident as i128 as #const_ty == ours::#name_ident);
+                            const _: () = assert!(ours::#name_ident as i128 == reference::#name_ident as i128);
+                        }
+                        .into_token_stream(),
+                    )
+                    .unwrap();
+                    let code = prettyplease::unparse(&code);
+
+                    match compile_rust(&code) {
+                        Ok(_) => {
+                            result.accepted_by_rules_const_count += 1;
+                            result
+                                .under_rule_accept_if_const_assert_as_i128_pass
+                                .insert(name.clone());
+                            continue;
+                        }
+                        Err(RustCompileError::CompileError { stderr }) => {
+                            tracing::warn!(
+                                "compare_consts: `const` {} failed the rule `accept_if_const_assert_as_i128_pass`: {}",
+                                name_str,
+                                stderr
+                            );
+                        }
+                        Err(RustCompileError::Other(err)) => panic!("{err}"),
                     }
                 }
 
@@ -865,6 +1005,33 @@ mod const_comparison {
                 );
             }
 
+            if !self.under_rule_accept_if_const_assert_pass.is_empty() {
+                tracing::info!(
+                    "compare_consts: {} `const`s that differ from the reference are allowed under the rule `accept_if_const_assert_pass`. They are: {}",
+                    self.under_rule_accept_if_const_assert_pass.len(),
+                    self.under_rule_accept_if_const_assert_pass
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+
+            if !self
+                .under_rule_accept_if_const_assert_as_i128_pass
+                .is_empty()
+            {
+                tracing::info!(
+                    "compare_consts: {} `const`s that differ from the reference are allowed under the rule `accept_if_const_assert_as_i128_pass`. They are: {}",
+                    self.under_rule_accept_if_const_assert_as_i128_pass.len(),
+                    self.under_rule_accept_if_const_assert_as_i128_pass
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+
             self.problems.report_problems_if_any(has_problems);
         }
 
@@ -909,5 +1076,48 @@ mod const_comparison {
                 )
             }
         }
+    }
+}
+
+enum RustCompileError {
+    CompileError { stderr: String },
+    Other(Box<dyn std::error::Error>),
+}
+
+fn compile_rust(code: &str) -> Result<(), RustCompileError> {
+    let tmp_dir = tempfile::tempdir().map_err(|e| RustCompileError::Other(Box::new(e)))?;
+
+    let mut child = std::process::Command::new("rustc")
+        .arg("--edition=2024")
+        .arg("--crate-type=lib")
+        .arg("--emit=metadata")
+        .arg("-C")
+        .arg("opt-level=0")
+        .arg("--out-dir")
+        .arg(tmp_dir.path())
+        .arg("-")
+        .stdin(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| RustCompileError::Other(Box::new(e)))?;
+
+    let Some(mut stdin) = child.stdin.take() else {
+        return Err(RustCompileError::Other("Failed to take stdin!".into()));
+    };
+    stdin
+        .write_all(code.as_bytes())
+        .map_err(|e| RustCompileError::Other(Box::new(e)))?;
+    drop(stdin);
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| RustCompileError::Other(Box::new(e)))?;
+
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(RustCompileError::CompileError {
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        })
     }
 }

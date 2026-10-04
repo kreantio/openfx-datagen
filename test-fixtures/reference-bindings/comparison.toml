@@ -3,10 +3,10 @@ rename_const = [
   { pattern = '^Ofx([a-zA-Z\d]+?)_(kOfx\1[a-zA-Z\d]+)$', replacement = '$2' },
 ]
 
+# See `xtask::bindings_comparison::config::ConfigRules`'s documentation for the
+# explanation.
 [rules]
-# `pub const FOO: bool = true;` -> `pub const FOO: u32 = 1;`
 our_const_bools_equal_to_u32_in_reference = true
-# `pub const FOO: Bar = BAZ;` -> `pub const FOO: Bar = <literal>;` 
 try_resolve_our_const_value_idents = true
 # accept if `const _: () = assert!(<reference_value> == <our_value>);` compiles.
 accept_if_const_assert_pass = [
@@ -22,7 +22,5 @@ accept_if_const_assert_pass = [
 accept_if_const_assert_as_i128_pass = [
   "kOfxFlagInfiniteMax",
   "kOfxFlagInfiniteMin",
-]
-accept_if_exact = [
-  { name = "kOfxStatOK", ours = "pub const kOfxStatOK: OfxStatus = 0;", reference = "pub const kOfxStatOK: u32 = 0;" },
+  "kOfxStatOK",
 ]

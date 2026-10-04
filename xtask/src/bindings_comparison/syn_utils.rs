@@ -1,3 +1,5 @@
+use std::collections::{BTreeSet, HashMap, HashSet};
+
 pub fn remove_docs(syn_file: &[syn::Item]) -> Vec<syn::Item> {
     let mut file = syn::File {
         shebang: None,
@@ -61,5 +63,85 @@ pub fn expr_try_as_literal(expr: &syn::Expr) -> Option<&syn::Lit> {
         Some(&expr_lit.lit)
     } else {
         None
+    }
+}
+
+pub fn ty_try_as_ident(ty: &syn::Type) -> Option<&syn::Ident> {
+    if let syn::Type::Path(type_path) = ty
+        && type_path.attrs.is_empty()
+        && type_path.qself.is_none()
+        && type_path.path.leading_colon.is_none()
+        && type_path.path.segments.len() == 1
+        && let Some(path_segment) = type_path.path.segments.first()
+        && path_segment.arguments.is_empty()
+    {
+        Some(&path_segment.ident)
+    } else {
+        None
+    }
+}
+
+pub fn get_all_idents(item: &syn::Item) -> Vec<String> {
+    #[derive(Default)]
+    struct Visitor(Vec<String>);
+
+    impl<'ast> syn::visit::Visit<'ast> for Visitor {
+        fn visit_ident(&mut self, ident: &'ast syn::Ident) {
+            self.0.push(ident.to_string());
+        }
+    }
+
+    let mut visitor = Visitor::default();
+    syn::visit::visit_item(&mut visitor, item);
+
+    visitor.0
+}
+
+pub trait Bindings {
+    fn consts(&self) -> &HashMap<String, syn::ItemConst>;
+    fn structs(&self) -> &HashMap<String, syn::ItemStruct>;
+    fn types(&self) -> &HashMap<String, syn::ItemType>;
+
+    fn get_item(&self, name: &str) -> Option<syn::Item> {
+        if let Some(item_const) = self.consts().get(name) {
+            return Some(syn::Item::Const(item_const.clone()));
+        }
+        if let Some(item_struct) = self.structs().get(name) {
+            return Some(syn::Item::Struct(item_struct.clone()));
+        }
+        if let Some(item_type) = self.types().get(name) {
+            return Some(syn::Item::Type(item_type.clone()));
+        }
+        None
+    }
+
+    fn get_all_definition_items_of(&self, idents: &[String]) -> Vec<syn::Item> {
+        let mut checked: HashSet<String> = HashSet::new();
+        let mut to_be_checked: BTreeSet<_> = idents.iter().cloned().collect();
+
+        let mut out: Vec<syn::Item> = vec![];
+
+        while let Some(name) = to_be_checked.iter().next().cloned() {
+            checked.insert(name.clone());
+            to_be_checked.remove(&name);
+
+            let Some(item) = self.get_item(&name) else {
+                continue;
+            };
+
+            for ident in get_all_idents(&item) {
+                if !checked.contains(&ident) && !to_be_checked.contains(&ident) {
+                    to_be_checked.insert(ident);
+                }
+            }
+
+            out.push(item);
+        }
+
+        out
+    }
+
+    fn get_all_definition_items_of_item(&self, item: &syn::Item) -> Vec<syn::Item> {
+        self.get_all_definition_items_of(&get_all_idents(item))
     }
 }
