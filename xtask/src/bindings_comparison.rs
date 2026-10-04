@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, hash_map},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, hash_map},
     hash::Hash,
     path::Path,
 };
@@ -12,47 +12,8 @@ use crate::{
     },
 };
 
-mod config {
-    use serde::Deserialize as _;
-
-    #[derive(serde::Deserialize)]
-    pub struct Config {
-        pub preprocessing: ConfigPreprocessing,
-        pub exceptions: ConfigExceptions,
-    }
-
-    #[derive(serde::Deserialize)]
-    pub struct ConfigPreprocessing {
-        pub reference_bindings: ConfigPreprocessingReferenceBindings,
-    }
-
-    #[derive(serde::Deserialize)]
-    pub struct ConfigPreprocessingReferenceBindings {
-        pub rename_const: Vec<ConfigPreprocessingRename>,
-    }
-
-    #[derive(serde::Deserialize)]
-    pub struct ConfigPreprocessingRename {
-        #[serde(deserialize_with = "deserialize_regex")]
-        pub pattern: regress::Regex,
-        pub replacement: String,
-    }
-
-    fn deserialize_regex<'de, D>(deserializer: D) -> Result<regress::Regex, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let text = String::deserialize(deserializer)?;
-        let re = regress::Regex::new(&text).map_err(serde::de::Error::custom)?;
-
-        Ok(re)
-    }
-
-    #[derive(serde::Deserialize)]
-    pub struct ConfigExceptions {
-        pub our_const_bools_equal_to_u32_in_reference: bool,
-    }
-}
+mod config;
+mod syn_utils;
 
 pub use config::Config;
 
@@ -138,7 +99,7 @@ impl OurBindings {
             every_items.extend(syn_file.items);
         }
 
-        let every_items = remove_docs(&every_items);
+        let every_items = syn_utils::remove_docs(&every_items);
 
         let mut ret = Self::default();
         let mut expected_consts: Vec<syn::ItemConst> = vec![];
@@ -218,6 +179,26 @@ impl OurBindings {
 
         self.problems.report_problems_if_any(has_problems);
     }
+
+    fn try_resolve_value_ident<'a>(&'a self, mut ident: &'a syn::Ident) -> Option<&'a syn::Lit> {
+        let mut seen: HashSet<String> = HashSet::new();
+
+        while let name = ident.to_string()
+            && let Some(item) = self.consts.get(&name)
+        {
+            if seen.contains(&name) {
+                panic!("try_resolve_value_ident: Circular: {name}");
+            }
+            seen.insert(name);
+            if let Some(lit) = syn_utils::expr_try_as_literal(&item.expr) {
+                return Some(lit);
+            } else {
+                let new_ident = syn_utils::expr_try_as_ident(&item.expr)?;
+                ident = new_ident;
+            }
+        }
+        None
+    }
 }
 
 impl OurBindingsProblems {
@@ -238,7 +219,7 @@ impl OurBindingsProblems {
         let mut unnamed_unaddressed_items: Vec<syn::Item> = vec![];
 
         for item in &self.unaddressed_items {
-            if let Some(name) = get_item_name(item) {
+            if let Some(name) = syn_utils::get_item_name(item) {
                 unaddressed_items_names.push(name);
             } else {
                 unnamed_unaddressed_items.push(item.clone());
@@ -303,7 +284,7 @@ struct ReferenceBindingsProblems {
 
 impl ReferenceBindings {
     fn from_syn_file(config: &Config, syn_file: syn::File) -> Self {
-        let every_item = remove_docs(&syn_file.items);
+        let every_item = syn_utils::remove_docs(&syn_file.items);
 
         let mut ret = ReferenceBindings::default();
 
@@ -344,7 +325,7 @@ impl ReferenceBindings {
                     }
                 }
                 _ => {
-                    if let Some(name) = get_item_name(&item)
+                    if let Some(name) = syn_utils::get_item_name(&item)
                         && (name.starts_with("Ofx") || name.starts_with("kOfx"))
                     {
                         ret.problems.unexpected_other_names.insert(name);
@@ -717,6 +698,8 @@ mod const_comparison {
 
     use quote::quote;
 
+    use crate::bindings_comparison::syn_utils;
+
     use super::{Config, Difference, OurBindings, ReferenceBindings};
 
     #[derive(Default)]
@@ -726,9 +709,10 @@ mod const_comparison {
         shared_name_count: usize,
         our_unique_name_count: BTreeSet<String>,
         same_const_count: usize,
-        exceptional_const_count: usize,
+        accepted_by_rules_const_count: usize,
 
-        exception_our_const_bools_equal_to_u32_in_reference: BTreeSet<String>,
+        under_rule_our_const_bools_equal_to_u32_in_reference: BTreeSet<String>,
+        under_rule_try_resolve_our_const_value_idents: BTreeSet<String>,
     }
 
     #[derive(Default)]
@@ -740,13 +724,13 @@ mod const_comparison {
     impl ConstComparisonResult {
         pub fn compare_consts(
             config: &Config,
-            ours: &OurBindings,
-            reference: &ReferenceBindings,
+            our_bindings: &OurBindings,
+            ref_bindings: &ReferenceBindings,
         ) -> Self {
             let mut result = ConstComparisonResult::default();
 
-            let our_names: HashSet<_> = ours.consts.keys().cloned().collect();
-            let reference_names: HashSet<_> = reference.consts.keys().cloned().collect();
+            let our_names: HashSet<_> = our_bindings.consts.keys().cloned().collect();
+            let reference_names: HashSet<_> = ref_bindings.consts.keys().cloned().collect();
 
             let shared_names: HashSet<_> =
                 our_names.intersection(&reference_names).cloned().collect();
@@ -766,8 +750,8 @@ mod const_comparison {
             }
 
             for name in shared_names {
-                let our_const = &ours.consts[&name];
-                let ref_const = &reference.consts[&name];
+                let our_const = &our_bindings.consts[&name];
+                let ref_const = &ref_bindings.consts[&name];
                 let ours = Self::stringify_const(our_const);
                 let reference = Self::stringify_const(ref_const);
 
@@ -777,28 +761,49 @@ mod const_comparison {
                     continue;
                 }
 
-                if config.exceptions.our_const_bools_equal_to_u32_in_reference {
-                    let our_ty = &our_const.ty;
-                    if quote! { #our_ty }.to_string() == "bool" {
-                        let our_expr = &our_const.expr;
+                if config.rules.our_const_bools_equal_to_u32_in_reference
+                    && let our_ty = &our_const.ty
+                    && quote! { #our_ty }.to_string() == "bool"
+                {
+                    let our_expr = &our_const.expr;
 
-                        let mut our_const = our_const.clone();
-                        our_const.ty = syn::parse_str("u32").unwrap();
-                        our_const.expr = match quote! { #our_expr }.to_string().as_str() {
-                            "false" => syn::parse_str("0").unwrap(),
-                            "true" => syn::parse_str("1").unwrap(),
-                            _ => our_expr.clone(),
-                        };
+                    let mut our_const = our_const.clone();
+                    our_const.ty = syn::parse_str("u32").unwrap();
+                    our_const.expr = match quote! { #our_expr }.to_string().as_str() {
+                        "false" => syn::parse_str("0").unwrap(),
+                        "true" => syn::parse_str("1").unwrap(),
+                        _ => our_expr.clone(),
+                    };
 
-                        let ours = Self::stringify_const(&our_const);
+                    let ours = Self::stringify_const(&our_const);
 
-                        if ours == reference {
-                            result.exceptional_const_count += 1;
-                            result
-                                .exception_our_const_bools_equal_to_u32_in_reference
-                                .insert(name.clone());
-                            continue;
-                        }
+                    if ours == reference {
+                        result.accepted_by_rules_const_count += 1;
+                        result
+                            .under_rule_our_const_bools_equal_to_u32_in_reference
+                            .insert(name.clone());
+                        continue;
+                    }
+                }
+
+                if config.rules.try_resolve_our_const_value_idents
+                    && let Some(ident) = syn_utils::expr_try_as_ident(&our_const.expr)
+                    && let Some(resolved) = our_bindings.try_resolve_value_ident(ident)
+                {
+                    let mut our_const = our_const.clone();
+                    *our_const.expr = syn::Expr::Lit(syn::ExprLit {
+                        attrs: vec![],
+                        lit: resolved.clone(),
+                    });
+
+                    let ours = Self::stringify_const(&our_const);
+
+                    if ours == reference {
+                        result.accepted_by_rules_const_count += 1;
+                        result
+                            .under_rule_try_resolve_our_const_value_idents
+                            .insert(name.clone());
+                        continue;
                     }
                 }
 
@@ -813,10 +818,10 @@ mod const_comparison {
 
         pub fn report(&self, has_problems: &mut bool) {
             tracing::info!(
-                "compare_consts: {} `const`s shares the same name. ({} of them have the same definition; {} of them are different but allowed exceptionally.)",
+                "compare_consts: {} `const`s shares the same name. ({} of them have the same definition; {} of them are different but allowed by rules.)",
                 self.shared_name_count,
                 self.same_const_count,
-                self.exceptional_const_count
+                self.accepted_by_rules_const_count
             );
             if !self.our_unique_name_count.is_empty() {
                 tracing::info!(
@@ -830,14 +835,29 @@ mod const_comparison {
                 );
             }
             if !self
-                .exception_our_const_bools_equal_to_u32_in_reference
+                .under_rule_our_const_bools_equal_to_u32_in_reference
                 .is_empty()
             {
                 tracing::info!(
-                    "compare_consts: {} `const`s that differ from the reference are allowed under the exception `our_const_bools_equal_to_u32_in_reference`. They are: {}",
-                    self.exception_our_const_bools_equal_to_u32_in_reference
+                    "compare_consts: {} `const`s that differ from the reference are allowed under the rule `our_const_bools_equal_to_u32_in_reference`. They are: {}",
+                    self.under_rule_our_const_bools_equal_to_u32_in_reference
                         .len(),
-                    self.exception_our_const_bools_equal_to_u32_in_reference
+                    self.under_rule_our_const_bools_equal_to_u32_in_reference
+                        .iter()
+                        .cloned()
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                );
+            }
+
+            if !self
+                .under_rule_try_resolve_our_const_value_idents
+                .is_empty()
+            {
+                tracing::info!(
+                    "compare_consts: {} `const`s that differ from the reference are allowed under the rule `try_resolve_our_const_value_idents`. They are: {}",
+                    self.under_rule_try_resolve_our_const_value_idents.len(),
+                    self.under_rule_try_resolve_our_const_value_idents
                         .iter()
                         .cloned()
                         .collect::<Vec<_>>()
@@ -889,48 +909,5 @@ mod const_comparison {
                 )
             }
         }
-    }
-}
-
-fn remove_docs(syn_file: &[syn::Item]) -> Vec<syn::Item> {
-    let mut file = syn::File {
-        shebang: None,
-        frontmatter: None,
-        attrs: vec![],
-        items: syn_file.to_vec(),
-    };
-
-    struct Visitor;
-    impl syn::visit_mut::VisitMut for Visitor {
-        fn visit_attributes_mut(&mut self, i: &mut Vec<syn::Attribute>) {
-            i.retain(|attr| !attr.path().is_ident("doc"));
-        }
-    }
-
-    let mut visitor = Visitor;
-    syn::visit_mut::visit_file_mut(&mut visitor, &mut file);
-
-    file.items
-}
-
-fn get_item_name(item: &syn::Item) -> Option<String> {
-    match item {
-        syn::Item::ForeignMod(_)
-        | syn::Item::Impl(_)
-        | syn::Item::Use(_)
-        | syn::Item::Verbatim(_) => None,
-        syn::Item::Const(item_const) => Some(item_const.ident.to_string()),
-        syn::Item::Enum(item_enum) => Some(item_enum.ident.to_string()),
-        syn::Item::ExternCrate(item_extern_crate) => Some(item_extern_crate.ident.to_string()),
-        syn::Item::Fn(item_fn) => Some(item_fn.sig.ident.to_string()),
-        syn::Item::Macro(item_macro) => item_macro.ident.as_ref().map(|ident| ident.to_string()),
-        syn::Item::Mod(item_mod) => Some(item_mod.ident.to_string()),
-        syn::Item::Static(item_static) => Some(item_static.ident.to_string()),
-        syn::Item::Struct(item_struct) => Some(item_struct.ident.to_string()),
-        syn::Item::Trait(item_trait) => Some(item_trait.ident.to_string()),
-        syn::Item::TraitAlias(item_trait_alias) => Some(item_trait_alias.ident.to_string()),
-        syn::Item::Type(item_type) => Some(item_type.ident.to_string()),
-        syn::Item::Union(item_union) => Some(item_union.ident.to_string()),
-        _ => todo!(),
     }
 }
