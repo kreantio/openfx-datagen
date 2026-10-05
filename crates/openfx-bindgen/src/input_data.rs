@@ -66,7 +66,7 @@ impl InputData {
     }
 
     pub fn find_item(&self, name: &str) -> Option<&RootItem> {
-        let file_name = self.find_item_origin_file_name(name).unwrap();
+        let file_name = self.find_item_origin_file_name(name)?;
 
         self.bindings.get(file_name)?.items.iter().find_map(|item| {
             if let RootItemWithCommentAbove::Item { item, .. } = item

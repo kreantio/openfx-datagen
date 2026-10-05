@@ -250,12 +250,19 @@ fn generate_bindings_one(
             }
             RootItem::TypedefEnum { name: _, variants } => {
                 let mut body = TokenStream::new();
+                let mut has_explicit_values = false;
                 for (i, variant) in variants.iter().enumerate() {
                     extend_with_doc(&mut body, variant.comment.as_deref());
                     let variant_name =
                         syn::Ident::new(&variant.name, proc_macro2::Span::call_site());
                     let value = match &variant.c_value_expr {
-                        Some(c_expr) => quote_enum_c_value_expr(c_expr),
+                        Some(c_expr) => {
+                            has_explicit_values = true;
+                            quote_enum_c_value_expr(c_expr)
+                        }
+                        None if has_explicit_values => {
+                            todo!("Support implicit enum variant values after explicit ones.")
+                        }
                         None => syn::LitInt::new(&i.to_string(), proc_macro2::Span::call_site())
                             .into_token_stream(),
                     };
@@ -427,7 +434,10 @@ fn quote_type_straightforward(input_data: &InputData, ty: &TypeStraightforward) 
         TypeStraightforward::Ptr { pointee } | TypeStraightforward::ConstPtr { pointee } => {
             if let TypeStraightforward::TypeIdentifier { is } = &**pointee
                 && matches!(
-                    input_data.find_item(is.as_str()).unwrap(),
+                    input_data.find_item(is.as_str()).unwrap_or_else(|| panic!(
+                        "Failed to find item for identifier: {}",
+                        is.as_str()
+                    )),
                     RootItem::TypedefFunction { .. }
                 )
             {
