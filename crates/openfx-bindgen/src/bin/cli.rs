@@ -11,13 +11,14 @@ struct Args {
     output: PathBuf,
 }
 
-pub fn main() {
+pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    let input_data = openfx_bindgen::input_data::load_input_data(args.input_data)
-        .expect("Failed to load input data");
+    let input_data = openfx_bindgen::input_data::load_input_data(args.input_data)?;
 
-    std::fs::create_dir_all(&args.output).expect("Failed to create folder `c_bindings`");
+    std::fs::create_dir_all(&args.output)?;
     openfx_bindgen::bindgen::generate_bindings(&input_data, &args.output)
-        .expect("Failed to generate bindings");
+        .map_err(|e| e as Box<dyn std::error::Error>)?;
+
+    Ok(())
 }

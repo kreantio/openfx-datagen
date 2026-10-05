@@ -1,6 +1,5 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet, hash_map},
-    hash::Hash,
     io::Write as _,
     path::Path,
 };
@@ -148,7 +147,7 @@ impl OurBindings {
         ret
     }
 
-    fn vec_to_hashmap<T: Hash + Eq>(
+    fn vec_to_hashmap<T>(
         vec: Vec<T>,
         problems: &mut OurBindingsProblems,
         to_string: impl Fn(&T) -> String,
@@ -221,6 +220,7 @@ impl OurBindingsProblems {
         self.unaddressed_items.is_empty()
             && self.unexpected_type_names.is_empty()
             && self.unexpected_value_names.is_empty()
+            && self.duplicate_names.is_empty()
     }
 
     fn report_problems_if_any(&self, has_problems: &mut bool) {
@@ -372,7 +372,7 @@ impl ReferenceBindings {
         );
         tracing::info!(
             "reference bindings: ignored {} other items.",
-            self.ignored_type_count
+            self.ignored_other_count
         );
         if !self.renamed_consts.is_empty() {
             tracing::info!(
