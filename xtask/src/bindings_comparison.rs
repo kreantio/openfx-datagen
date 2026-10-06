@@ -271,6 +271,17 @@ impl OurBindingsProblems {
                     .join(", ")
             );
         }
+
+        if !self.duplicate_names.is_empty() {
+            tracing::error!(
+                "our bindings: Duplicate names: {}",
+                self.duplicate_names
+                    .iter()
+                    .cloned()
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            );
+        }
     }
 }
 
