@@ -1,0 +1,26 @@
+[preprocessing.reference_bindings]
+rename_const = [
+  { pattern = '^Ofx([a-zA-Z\d]+?)_(kOfx\1[a-zA-Z\d]+)$', replacement = '$2' },
+]
+
+# See `xtask::bindings_comparison::config::ConfigRules`'s documentation for the
+# explanation.
+[rules]
+our_const_bools_equal_to_u32_in_reference = true
+try_resolve_our_const_value_idents = true
+# accept if `const _: () = assert!(<reference_value> == <our_value>);` compiles.
+accept_if_const_assert_pass = [
+  "kOfxDrawTextAlignmentCenterH",
+  "kOfxDrawTextAlignmentCenterV",
+]
+# accept if `const _: () = assert!(
+#    <reference_value> as i128 as <reference_type> == <reference_value> &&
+#    <our_value> as i128 as <our_type> == <our_value> &&
+#    <reference_value> as i128 == <our_value> as i128
+#  );`
+# compiles.
+accept_if_const_assert_as_i128_pass = [
+  "kOfxFlagInfiniteMax",
+  "kOfxFlagInfiniteMin",
+  "kOfxStatOK",
+]
