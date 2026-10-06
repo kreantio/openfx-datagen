@@ -22,10 +22,12 @@ generates Rust bindings from data produced by `openfx-datagen`.
 
 The following tools are required:
 
-| Tool(s) \\ To                           | Run tests | Update Generated Schemata |
-| --------------------------------------- | --------- | ------------------------- |
-| POSIX tools (`sh`, `rm`, `mkdir`, etc.) | no        | not strictly              |
-| [`just`]                                | no        | not strictly              |
+| Tool(s) \\ To                           | Run tests | Update Generated Schemata | Update Reference Bindings |
+| --------------------------------------- | --------- | ------------------------- | ------------------------- |
+| POSIX tools (`sh`, `rm`, `mkdir`, etc.) | no        | not strictly              | not strictly              |
+| [`just`]                                | no        | not strictly              | not strictly              |
+| [`clang++`]                             | no        | no                        | yes                       |
 
 [`openfx-rs`]: https://github.com/kreantio/openfx-rs
 [`just`]: https://github.com/casey/just
+[`clang++`]: https://clang.llvm.org/
