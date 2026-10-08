@@ -33,7 +33,7 @@ compare-generated-bindings-against-reference-bindings:
 
     cargo run --package openfx-datagen --bin cli -- gen-data \
         --input-c-headers ./test-fixtures/openfx/include \
-        --output-data ./test-fixtures/tmp/data
+        --output-bindings-data ./test-fixtures/tmp/data/bindings
 
     cargo run --package openfx-bindgen --bin cli -- \
         --input-data ./test-fixtures/tmp/data/bindings \

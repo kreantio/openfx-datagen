@@ -4,6 +4,7 @@ use clap::{Parser, Subcommand};
 use rayon::iter::{IntoParallelRefIterator as _, ParallelIterator as _};
 
 use openfx_datagen::{
+    metadata_extracting::extract_metadata,
     parsing::{BindingsUnprocessed, parse},
     processing::{Bindings, process},
 };
@@ -26,9 +27,13 @@ struct CommandGenData {
     #[arg(long)]
     input_c_headers: PathBuf,
 
-    /// the path to the output directory for generated data
+    /// the path to the output directory for generated data for bindings
     #[arg(long)]
-    output_data: PathBuf,
+    output_bindings_data: Option<PathBuf>,
+
+    /// the path to the output directory for generated metadata
+    #[arg(long)]
+    output_metadata: Option<PathBuf>,
 }
 
 #[derive(Debug, Parser)]
@@ -82,20 +87,30 @@ fn gen_data(cmd: CommandGenData) -> Result<(), Box<dyn std::error::Error + Send 
             )
             .collect::<Result<BTreeMap<_, _>, _>>()?;
 
+    if let Some(output_metadata_path) = cmd.output_metadata {
+        std::fs::create_dir_all(&output_metadata_path)?;
+
+        let metadata = extract_metadata(&parsed_headers)?;
+        let output_path = output_metadata_path.join("metadata.json");
+        let file = std::fs::File::create(&output_path)?;
+        serde_json::to_writer_pretty(file, &metadata)?;
+    }
+
     let processed_bindings = process(parsed_headers)?;
 
-    let output_bindings_path = cmd.output_data.join("bindings");
-    std::fs::create_dir_all(&output_bindings_path)?;
+    if let Some(output_bindings_path) = cmd.output_bindings_data {
+        std::fs::create_dir_all(&output_bindings_path)?;
 
-    processed_bindings.par_iter().try_for_each(
-        |(name, bindings)| -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-            let output_path = output_bindings_path.join(format!("{}.json", name));
-            let file = std::fs::File::create(&output_path)?;
-            bindings.write_json_pretty(file)?;
+        processed_bindings.par_iter().try_for_each(
+            |(name, bindings)| -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+                let output_path = output_bindings_path.join(format!("{}.json", name));
+                let file = std::fs::File::create(&output_path)?;
+                bindings.write_json_pretty(file)?;
 
-            Ok(())
-        },
-    )?;
+                Ok(())
+            },
+        )?;
+    }
 
     Ok(())
 }

@@ -1,3 +1,4 @@
+pub mod metadata_extracting;
 pub mod parsing;
 pub mod processing;
 
