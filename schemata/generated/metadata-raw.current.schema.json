@@ -1,0 +1,275 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Metadata",
+  "type": "object",
+  "properties": {
+    "propdef_map": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PropdefMetadataEntry"
+      }
+    },
+    "propset_map": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/PropsetMetadataEntry"
+      }
+    },
+    "propsetdef_map": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Todo"
+      }
+    },
+    "actiondef_map": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Todo"
+      }
+    }
+  },
+  "required": [
+    "propdef_map",
+    "propset_map",
+    "propsetdef_map",
+    "actiondef_map"
+  ],
+  "$defs": {
+    "PropdefMetadataEntry": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/$defs/PropdefType"
+        },
+        "dimension": {
+          "$ref": "#/$defs/PropdefDimension"
+        },
+        "introduced": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "deprecated": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "host_optional": {
+          "type": "boolean"
+        },
+        "optional": {
+          "type": "boolean"
+        },
+        "cname": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "type",
+        "dimension"
+      ]
+    },
+    "PropdefType": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "one_of": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/PropdefTypeSimple"
+              }
+            },
+            "$type": {
+              "type": "string",
+              "const": "Simple"
+            }
+          },
+          "required": [
+            "$type",
+            "one_of"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "one_of": {
+              "title": "Note",
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/StringEnumVariant"
+              }
+            },
+            "$type": {
+              "type": "string",
+              "const": "StringEnum"
+            }
+          },
+          "required": [
+            "$type",
+            "one_of"
+          ]
+        }
+      ]
+    },
+    "PropdefTypeSimple": {
+      "type": "string",
+      "enum": [
+        "Int",
+        "Double",
+        "Bool",
+        "String",
+        "Pointer"
+      ]
+    },
+    "StringEnumVariant": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "cname": {
+              "type": "string"
+            },
+            "$type": {
+              "type": "string",
+              "const": "Defined"
+            }
+          },
+          "required": [
+            "$type",
+            "cname"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string"
+            },
+            "$type": {
+              "type": "string",
+              "const": "Literal"
+            }
+          },
+          "required": [
+            "$type",
+            "value"
+          ]
+        }
+      ]
+    },
+    "PropdefDimension": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "size": {
+              "type": "integer",
+              "format": "uint",
+              "minimum": 0
+            },
+            "$type": {
+              "type": "string",
+              "const": "Fixed"
+            }
+          },
+          "required": [
+            "$type",
+            "size"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "$type": {
+              "type": "string",
+              "const": "Dynamic"
+            }
+          },
+          "required": [
+            "$type"
+          ]
+        }
+      ]
+    },
+    "PropsetMetadataEntry": {
+      "type": "object",
+      "properties": {
+        "write": {
+          "$ref": "#/$defs/WriteSide"
+        },
+        "props": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/PropsetPropValue"
+          }
+        },
+        "props_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "write"
+      ]
+    },
+    "WriteSide": {
+      "type": "string",
+      "enum": [
+        "Host",
+        "Plugin"
+      ]
+    },
+    "PropsetPropValue": {
+      "type": "object",
+      "properties": {
+        "host_optional": {
+          "type": "boolean"
+        },
+        "write": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/WriteSide"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "Todo": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "TODO": {
+              "type": "object",
+              "properties": {
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "content"
+              ]
+            }
+          },
+          "required": [
+            "TODO"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

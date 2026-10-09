@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::utils::write_schema_json_pretty;
+
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct Metadata {
     pub propdef_map: BTreeMap<String, PropdefMetadataEntry>,
@@ -8,6 +10,14 @@ pub struct Metadata {
     // pub actiondef_map: BTreeMap<String, ActiondefMetadataEntry>,
     pub propsetdef_map: BTreeMap<String, Todo>,
     pub actiondef_map: BTreeMap<String, Todo>,
+}
+
+impl Metadata {
+    pub fn write_schema_json_pretty<W: std::io::Write>(
+        writer: W,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        write_schema_json_pretty::<_, Self>(writer)
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]

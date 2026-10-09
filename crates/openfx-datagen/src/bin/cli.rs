@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use rayon::iter::{IntoParallelRefIterator as _, ParallelIterator as _};
 
 use openfx_datagen::{
-    metadata_extracting::extract_metadata,
+    metadata_extracting::{Metadata, extract_metadata},
     parsing::{BindingsUnprocessed, parse},
     processing::{Bindings, process},
 };
@@ -118,9 +118,15 @@ fn gen_data(cmd: CommandGenData) -> Result<(), Box<dyn std::error::Error + Send 
 fn gen_schemata(cmd: CommandGenSchemata) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let output_schemata_path = cmd.output_schemata;
     std::fs::create_dir_all(&output_schemata_path)?;
+
     let output_bindings_schema_path = output_schemata_path.join("bindings.current.schema.json");
     let file = std::fs::File::create(&output_bindings_schema_path)?;
     Bindings::write_schema_json_pretty(file)?;
+
+    let output_metadata_raw_schema_path =
+        output_schemata_path.join("metadata-raw.current.schema.json");
+    let file = std::fs::File::create(&output_metadata_raw_schema_path)?;
+    Metadata::write_schema_json_pretty(file)?;
 
     Ok(())
 }
