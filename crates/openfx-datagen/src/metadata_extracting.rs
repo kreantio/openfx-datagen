@@ -210,6 +210,9 @@ fn parse_propdef(
                         ));
                         continue;
                     }
+                    if stringname.starts_with("Ofx") || stringname.starts_with("kOfx") {
+                        tracing::warn!("parse_propdef: Slipped through?: {stringname}");
+                    }
                     StringEnumVariant::Literal {
                         value: stringname.to_owned(),
                     }
