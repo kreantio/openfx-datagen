@@ -87,6 +87,11 @@ pub enum PropsetError {
         option_name: String,
         option_value: String,
     },
+    PropsetPropUnexpectedOptionValue {
+        prop_cname: String,
+        option_name: String,
+        option_value: String,
+    },
     PropsetPropDuplicateOption {
         prop_cname: String,
         option_name: String,

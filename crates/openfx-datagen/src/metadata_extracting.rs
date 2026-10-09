@@ -93,6 +93,19 @@ fn parse_propdef(
     error: &mut Error,
     stringname_to_cname: &HashMap<&str, &str>,
 ) -> Option<PropdefMetadataEntry> {
+    macro_rules! err_continue {
+        ($err:expr) => {
+            error.propdef_errors.push((cname.to_owned(), $err));
+            continue;
+        };
+    }
+    macro_rules! err_return {
+        ($err:expr) => {
+            error.propdef_errors.push((cname.to_owned(), $err));
+            return None;
+        };
+    }
+
     let mut r#type: Option<PropdefType> = None;
     let mut values: Vec<StringEnumVariant> = vec![];
     let mut dimension: Option<PropdefDimension> = None;
@@ -109,13 +122,9 @@ fn parse_propdef(
             continue;
         } else if let Some(value) = line.strip_prefix("type: ") {
             if r#type.is_some() {
-                error.propdef_errors.push((
-                    cname.to_owned(),
-                    PropdefError::PropdefDuplicateField {
-                        field_name: "type".to_owned(),
-                    },
-                ));
-                continue;
+                err_continue!(PropdefError::PropdefDuplicateField {
+                    field_name: "type".to_owned(),
+                });
             }
 
             let value = value.trim();
@@ -141,14 +150,10 @@ fn parse_propdef(
                             "string" => PropdefTypeSimple::String,
                             "pointer" => PropdefTypeSimple::Pointer,
                             _ => {
-                                error.propdef_errors.push((
-                                    cname.to_owned(),
-                                    PropdefError::PropdefUnexpectedFieldValue {
-                                        field_name: "type".to_owned(),
-                                        value: ty.to_owned(),
-                                    },
-                                ));
-                                continue;
+                                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                                    field_name: "type".to_owned(),
+                                    value: ty.to_owned(),
+                                });
                             }
                         };
                         one_of.insert(ty);
@@ -156,14 +161,10 @@ fn parse_propdef(
                     Some(PropdefType::Simple { one_of })
                 }
                 _ => {
-                    error.propdef_errors.push((
-                        cname.to_owned(),
-                        PropdefError::PropdefUnexpectedFieldValue {
-                            field_name: "type".to_owned(),
-                            value: value.to_owned(),
-                        },
-                    ));
-                    continue;
+                    err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                        field_name: "type".to_owned(),
+                        value: value.to_owned(),
+                    });
                 }
             }
         } else if line == "values:" {
@@ -182,14 +183,10 @@ fn parse_propdef(
                     {
                         // Being conservative here because we don't yet know how
                         // escaping would work.
-                        error.propdef_errors.push((
-                            cname.to_owned(),
-                            PropdefError::PropdefUnexpectedFieldValue {
-                                field_name: "values".to_owned(),
-                                value: stringname.to_owned(),
-                            },
-                        ));
-                        continue;
+                        err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                            field_name: "values".to_owned(),
+                            value: stringname.to_owned(),
+                        });
                     }
                     StringEnumVariant::Literal {
                         value: stringname.to_owned(),
@@ -204,14 +201,10 @@ fn parse_propdef(
                         .is_some()
                     {
                         // must be a new syntax.
-                        error.propdef_errors.push((
-                            cname.to_owned(),
-                            PropdefError::PropdefUnexpectedFieldValue {
-                                field_name: "values".to_owned(),
-                                value: stringname.to_owned(),
-                            },
-                        ));
-                        continue;
+                        err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                            field_name: "values".to_owned(),
+                            value: stringname.to_owned(),
+                        });
                     }
                     if stringname.starts_with("Ofx") || stringname.starts_with("kOfx") {
                         tracing::warn!("parse_propdef: Slipped through?: {stringname}");
@@ -224,14 +217,10 @@ fn parse_propdef(
             }
         } else if let Some(value) = line.strip_prefix("dimension: ") {
             if dimension.is_some() {
-                error.propdef_errors.push((
-                    cname.to_owned(),
-                    PropdefError::PropdefUnexpectedFieldValue {
-                        field_name: "dimension".to_owned(),
-                        value: value.to_owned(),
-                    },
-                ));
-                continue;
+                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                    field_name: "dimension".to_owned(),
+                    value: value.to_owned(),
+                });
             }
 
             let value = value.trim();
@@ -240,25 +229,17 @@ fn parse_propdef(
             } else if let Ok(n) = value.parse::<usize>() {
                 dimension = Some(PropdefDimension::Fixed { size: n });
             } else {
-                error.propdef_errors.push((
-                    cname.to_owned(),
-                    PropdefError::PropdefUnexpectedFieldValue {
-                        field_name: "dimension".to_owned(),
-                        value: value.to_owned(),
-                    },
-                ));
-                continue;
+                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                    field_name: "dimension".to_owned(),
+                    value: value.to_owned(),
+                });
             }
         } else if let Some(value) = line.strip_prefix("introduced: ") {
             if introduced.is_some() {
-                error.propdef_errors.push((
-                    cname.to_owned(),
-                    PropdefError::PropdefUnexpectedFieldValue {
-                        field_name: "introduced".to_owned(),
-                        value: value.to_owned(),
-                    },
-                ));
-                continue;
+                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                    field_name: "introduced".to_owned(),
+                    value: value.to_owned(),
+                });
             }
 
             let value = value.trim();
@@ -268,68 +249,48 @@ fn parse_propdef(
                 "parse_propdef: {cname}:found `added: `, will treat it as `introduced: `."
             );
             if introduced.is_some() {
-                error.propdef_errors.push((
-                    cname.to_owned(),
-                    PropdefError::PropdefUnexpectedFieldValue {
-                        field_name: "introduced".to_owned(),
-                        value: value.to_owned(),
-                    },
-                ));
-                continue;
+                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                    field_name: "introduced".to_owned(),
+                    value: value.to_owned(),
+                });
             }
 
             let value = value.trim();
             introduced = Some(value.to_owned());
         } else if let Some(value) = line.strip_prefix("deprecated: ") {
             if deprecated.is_some() {
-                error.propdef_errors.push((
-                    cname.to_owned(),
-                    PropdefError::PropdefUnexpectedFieldValue {
-                        field_name: "deprecated".to_owned(),
-                        value: value.to_owned(),
-                    },
-                ));
-                continue;
+                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                    field_name: "deprecated".to_owned(),
+                    value: value.to_owned(),
+                });
             }
 
             let value = value.trim();
             deprecated = Some(value.to_owned());
         } else if line == "hostOptional: true" {
             if host_optional {
-                error.propdef_errors.push((
-                    cname.to_owned(),
-                    PropdefError::PropdefUnexpectedFieldValue {
-                        field_name: "hostOptional".to_owned(),
-                        value: "true".to_owned(),
-                    },
-                ));
-                continue;
+                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                    field_name: "hostOptional".to_owned(),
+                    value: "true".to_owned(),
+                });
             }
             host_optional = true;
         } else if line == "optional: true" {
             if optional {
-                error.propdef_errors.push((
-                    cname.to_owned(),
-                    PropdefError::PropdefUnexpectedFieldValue {
-                        field_name: "optional".to_owned(),
-                        value: "true".to_owned(),
-                    },
-                ));
-                continue;
+                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                    field_name: "optional".to_owned(),
+                    value: "true".to_owned(),
+                });
             }
             optional = true;
         } else if let Some(value) = line.strip_prefix("cname") {
             tracing::warn!("parse_propdef: {cname}: found redundant `cname`: {value}");
 
             if prop_cname.is_some() {
-                error.propdef_errors.push((
-                    cname.to_owned(),
-                    PropdefError::PropdefUnexpectedFieldValue {
-                        field_name: "cname".to_owned(),
-                        value: value.to_owned(),
-                    },
-                ));
-                continue;
+                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                    field_name: "cname".to_owned(),
+                    value: value.to_owned(),
+                });
             }
 
             let value = value.trim();
@@ -342,14 +303,10 @@ fn parse_propdef(
     }
 
     if r#type.is_none() || dimension.is_none() {
-        error.propdef_errors.push((
-            cname.to_owned(),
-            PropdefError::PropdefIncomplete {
-                missing_type: r#type.is_none(),
-                missing_dimension: dimension.is_none(),
-            },
-        ));
-        return None;
+        err_return!(PropdefError::PropdefIncomplete {
+            missing_type: r#type.is_none(),
+            missing_dimension: dimension.is_none(),
+        });
     }
     let mut r#type = r#type.unwrap();
     let dimension = dimension.unwrap();
@@ -357,20 +314,12 @@ fn parse_propdef(
     match &mut r#type {
         PropdefType::Simple { .. } => {
             if !values.is_empty() {
-                error.propdef_errors.push((
-                    cname.to_owned(),
-                    PropdefError::PropdefNonEnumWithValuesField,
-                ));
-                return None;
+                err_return!(PropdefError::PropdefNonEnumWithValuesField);
             }
         }
         PropdefType::StringEnum { one_of } => {
             if values.is_empty() {
-                error.propdef_errors.push((
-                    cname.to_owned(),
-                    PropdefError::PropdefEnumWithoutValuesField,
-                ));
-                return None;
+                err_return!(PropdefError::PropdefEnumWithoutValuesField);
             }
             debug_assert!(one_of.is_empty());
             *one_of = values;
@@ -394,6 +343,19 @@ fn parse_propset(
     error: &mut Error,
     stringname_to_cname: &HashMap<&str, &str>,
 ) -> Option<PropsetMetadataEntry> {
+    macro_rules! err_continue {
+        ($err:expr) => {
+            error.propset_errors.push((name.to_owned(), $err));
+            continue;
+        };
+    }
+    macro_rules! err_return {
+        ($err:expr) => {
+            error.propset_errors.push((name.to_owned(), $err));
+            return None;
+        };
+    }
+
     let mut write: Option<WriteSide> = None;
     let mut props: BTreeMap<String, PropsetPropValue> = BTreeMap::new();
     let mut props_refs: BTreeSet<String> = BTreeSet::new();
@@ -405,25 +367,17 @@ fn parse_propset(
             continue;
         } else if let Some(value) = line.strip_prefix("write: ") {
             if write.is_some() {
-                error.propset_errors.push((
-                    name.to_owned(),
-                    PropsetError::PropsetDuplicateField {
-                        field_name: "write".to_owned(),
-                    },
-                ));
-                continue;
+                err_continue!(PropsetError::PropsetDuplicateField {
+                    field_name: "write".to_owned(),
+                });
             }
             write = match WriteSide::try_from(value) {
                 Some(value) => Some(value),
                 None => {
-                    error.propset_errors.push((
-                        name.to_owned(),
-                        PropsetError::PropsetUnexpectedFieldValue {
-                            field_name: "write".to_owned(),
-                            value: value.to_owned(),
-                        },
-                    ));
-                    continue;
+                    err_continue!(PropsetError::PropsetUnexpectedFieldValue {
+                        field_name: "write".to_owned(),
+                        value: value.to_owned(),
+                    });
                 }
             };
         } else if line == "props:" {
@@ -436,13 +390,9 @@ fn parse_propset(
 
                 if let Some(props_ref_name) = stringname.strip_suffix("_REF") {
                     if !opts.is_empty() {
-                        error.propset_errors.push((
-                            name.to_owned(),
-                            PropsetError::PropsetPropsRefWithOptions {
-                                props_ref_cname: props_ref_name.to_owned(),
-                            },
-                        ));
-                        continue;
+                        err_continue!(PropsetError::PropsetPropsRefWithOptions {
+                            props_ref_cname: props_ref_name.to_owned(),
+                        });
                     }
 
                     props_refs.insert(props_ref_name.to_owned());
@@ -450,13 +400,9 @@ fn parse_propset(
                 }
 
                 let Some(&prop_cname) = stringname_to_cname.get(stringname) else {
-                    error.propset_errors.push((
-                        name.to_owned(),
-                        PropsetError::PropsetUndefinedProp {
-                            stringname: stringname.to_owned(),
-                        },
-                    ));
-                    continue;
+                    err_continue!(PropsetError::PropsetUndefinedProp {
+                        stringname: stringname.to_owned(),
+                    });
                 };
 
                 let mut value = PropsetPropValue::default();
@@ -465,52 +411,37 @@ fn parse_propset(
                     match opt_name {
                         "host_optional" => {
                             if value.host_optional {
-                                error.propset_errors.push((
-                                    name.to_owned(),
-                                    PropsetError::PropsetPropDuplicateOption {
-                                        prop_cname: prop_cname.to_owned(),
-                                        option_name: "host_optional".to_owned(),
-                                    },
-                                ));
-                                continue;
+                                err_continue!(PropsetError::PropsetPropDuplicateOption {
+                                    prop_cname: prop_cname.to_owned(),
+                                    option_name: "host_optional".to_owned(),
+                                });
                             }
                             value.host_optional = true;
                         }
                         "write" => {
                             if value.write.is_some() {
-                                error.propset_errors.push((
-                                    name.to_owned(),
-                                    PropsetError::PropsetPropDuplicateOption {
-                                        prop_cname: prop_cname.to_owned(),
-                                        option_name: "write".to_owned(),
-                                    },
-                                ));
-                                continue;
+                                err_continue!(PropsetError::PropsetPropDuplicateOption {
+                                    prop_cname: prop_cname.to_owned(),
+                                    option_name: "write".to_owned(),
+                                });
                             }
                             value.write = match WriteSide::try_from(opt_value) {
-                                Some(value) => Some(value),
+                                Some(write_side) => Some(write_side),
                                 None => {
-                                    error.propset_errors.push((
-                                        name.to_owned(),
-                                        PropsetError::PropsetPropUnexpectedOption {
-                                            prop_cname: prop_cname.to_owned(),
-                                            option_name: "write".to_owned(),
-                                            option_value: opt_value.to_owned(),
-                                        },
-                                    ));
-                                    continue;
+                                    err_continue!(PropsetError::PropsetPropUnexpectedOptionValue {
+                                        prop_cname: prop_cname.to_owned(),
+                                        option_name: "write".to_owned(),
+                                        option_value: opt_value.to_owned(),
+                                    });
                                 }
-                            };
+                            }
                         }
                         _ => {
-                            error.propset_errors.push((
-                                name.to_owned(),
-                                PropsetError::PropsetPropUnexpectedOption {
-                                    prop_cname: prop_cname.to_owned(),
-                                    option_name: opt_name.to_owned(),
-                                    option_value: opt_value.to_owned(),
-                                },
-                            ));
+                            err_continue!(PropsetError::PropsetPropUnexpectedOption {
+                                prop_cname: prop_cname.to_owned(),
+                                option_name: opt_name.to_owned(),
+                                option_value: opt_value.to_owned(),
+                            });
                         }
                     }
                 }
@@ -527,12 +458,9 @@ fn parse_propset(
                             );
                             continue;
                         } else {
-                            error.propset_errors.push((
-                                name.to_owned(),
-                                PropsetError::PropsetPropDuplicate {
-                                    prop_cname: prop_cname.to_owned(),
-                                },
-                            ));
+                            err_continue!(PropsetError::PropsetPropDuplicate {
+                                prop_cname: prop_cname.to_owned(),
+                            });
                         }
                     }
                 }
@@ -543,13 +471,9 @@ fn parse_propset(
     }
 
     let Some(write) = write else {
-        error.propset_errors.push((
-            name.to_owned(),
-            PropsetError::PropsetIncomplete {
-                missing_write: true,
-            },
-        ));
-        return None;
+        err_return!(PropsetError::PropsetIncomplete {
+            missing_write: true,
+        });
     };
 
     Option::Some(PropsetMetadataEntry {
