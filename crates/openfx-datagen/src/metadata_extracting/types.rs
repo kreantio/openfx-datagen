@@ -7,8 +7,7 @@ pub struct Metadata {
     pub propdef_map: BTreeMap<String, PropdefMetadataEntry>,
     pub propset_map: BTreeMap<String, PropsetMetadataEntry>,
     pub propsetdef_map: BTreeMap<String, PropsetdefMetadataEntry>,
-    // pub actiondef_map: BTreeMap<String, ActiondefMetadataEntry>,
-    pub actiondef_map: BTreeMap<String, Todo>,
+    pub actiondef_map: BTreeMap<String, ActiondefMetadataEntry>,
 }
 
 impl Metadata {

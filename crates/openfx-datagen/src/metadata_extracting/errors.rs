@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 #[derive(Debug, snafu::Snafu, Default)]
 pub struct Error {
     pub propdef_not_on_item_count: usize,
@@ -12,10 +10,13 @@ pub struct Error {
     pub propset_errors: Vec<(String, PropsetError)>,
 
     pub propsetdef_without_name_count: usize,
+    /// The keys are the names of the `@propsetdef`s.
     pub propsetdef_errors: Vec<(String, PropsetdefError)>,
 
     pub actiondef_not_on_item_count: usize,
-    pub actiondef_entries_with_names: HashSet<String>,
+    /// The keys are the cnames of the items the `@actiondef`s are associated
+    /// with.
+    pub actiondef_errors: Vec<(String, ActiondefError)>,
 }
 
 impl Error {
@@ -27,7 +28,7 @@ impl Error {
             && self.propsetdef_errors.is_empty()
             && self.propsetdef_without_name_count == 0
             && self.actiondef_not_on_item_count == 0
-            && self.actiondef_entries_with_names.is_empty()
+            && self.actiondef_errors.is_empty()
     }
 }
 
@@ -120,4 +121,13 @@ pub enum PropValueError {
     PropValueDuplicateOption {
         option_name: String,
     },
+}
+
+#[derive(Debug, snafu::Snafu)]
+pub enum ActiondefError {
+    ActiondefWithName { name: String },
+    ActiondefUndefinedInArg { stringname: String },
+    ActiondefInArgWithOptions { in_arg_cname: String },
+    ActiondefUndefinedOutArg { stringname: String },
+    ActiondefOutArgWithOptions { out_arg_cname: String },
 }

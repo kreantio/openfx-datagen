@@ -13,3 +13,25 @@ pub fn write_schema_json_pretty<W: std::io::Write, T: ?Sized + schemars::JsonSch
     serde_json::to_writer_pretty(writer, &bindings_schema)?;
     Ok(())
 }
+
+pub struct SignificantLines<'a>(std::str::Lines<'a>);
+
+impl<'a> SignificantLines<'a> {
+    pub fn new(lines: std::str::Lines<'a>) -> Self {
+        Self(lines)
+    }
+}
+
+impl<'a> std::iter::Iterator for SignificantLines<'a> {
+    type Item = &'a str;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        for line in self.0.by_ref() {
+            let line = line.trim();
+            if !line.is_empty() && !line.starts_with('#') {
+                return Some(line);
+            }
+        }
+        None
+    }
+}

@@ -24,7 +24,7 @@
     "actiondef_map": {
       "type": "object",
       "additionalProperties": {
-        "$ref": "#/$defs/Todo"
+        "$ref": "#/$defs/ActiondefMetadataEntry"
       }
     }
   },
@@ -261,29 +261,24 @@
         "props"
       ]
     },
-    "Todo": {
-      "oneOf": [
-        {
-          "type": "object",
-          "properties": {
-            "TODO": {
-              "type": "object",
-              "properties": {
-                "content": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            }
-          },
-          "required": [
-            "TODO"
-          ],
-          "additionalProperties": false
+    "ActiondefMetadataEntry": {
+      "type": "object",
+      "properties": {
+        "in_args": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
+        },
+        "out_args": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string"
+          }
         }
-      ]
+      }
     }
   }
 }

@@ -3,7 +3,10 @@ use std::{
     iter::Peekable,
 };
 
-use crate::parsing::{BindingsUnprocessed, DefineValue, RootItem, RootItemWithCommentAbove};
+use crate::{
+    parsing::{BindingsUnprocessed, DefineValue, RootItem, RootItemWithCommentAbove},
+    utils::SignificantLines,
+};
 
 pub use crate::metadata_extracting::{errors::*, types::*};
 
@@ -75,12 +78,12 @@ pub fn extract_metadata(
                     error.actiondef_not_on_item_count += 1;
                     continue;
                 };
-                metadata.actiondef_map.insert(
-                    cname.to_string(),
-                    Todo::TODO {
-                        content: lines.collect::<Vec<_>>().join("\n"),
-                    },
-                );
+
+                if let Some(entry) =
+                    parse_actiondef(&cname, lines.peekable(), &mut error, &stringname_to_cname)
+                {
+                    metadata.actiondef_map.insert(cname.to_string(), entry);
+                }
             }
         }
     }
@@ -94,7 +97,7 @@ pub fn extract_metadata(
 
 fn parse_propdef(
     cname: &str,
-    mut lines: Peekable<std::str::Lines>,
+    mut lines: Peekable<SignificantLines>,
     error: &mut Error,
     stringname_to_cname: &HashMap<&str, &str>,
 ) -> Option<PropdefMetadataEntry> {
@@ -344,7 +347,7 @@ fn parse_propdef(
 
 fn parse_propset(
     name: &str,
-    mut lines: Peekable<std::str::Lines>,
+    mut lines: Peekable<SignificantLines>,
     error: &mut Error,
     stringname_to_cname: &HashMap<&str, &str>,
 ) -> Option<PropsetMetadataEntry> {
@@ -462,7 +465,7 @@ fn parse_propset(
 
 fn parse_propsetdef(
     name: &str,
-    lines: Peekable<std::str::Lines>,
+    lines: Peekable<SignificantLines>,
     error: &mut Error,
     stringname_to_cname: &HashMap<&str, &str>,
 ) -> Option<PropsetdefMetadataEntry> {
@@ -521,6 +524,85 @@ fn parse_propsetdef(
     }
 
     Some(PropsetdefMetadataEntry { props })
+}
+
+fn parse_actiondef(
+    cname: &str,
+    mut lines: Peekable<SignificantLines>,
+    error: &mut Error,
+    stringname_to_cname: &HashMap<&str, &str>,
+) -> Option<ActiondefMetadataEntry> {
+    macro_rules! err_continue {
+        ($err:expr) => {
+            error.actiondef_errors.push((cname.to_owned(), $err));
+            continue;
+        };
+    }
+
+    let mut in_args: BTreeSet<String> = BTreeSet::new();
+    let mut out_args: BTreeSet<String> = BTreeSet::new();
+
+    while let Some(line) = lines.next() {
+        let line = line.trim();
+
+        if line.is_empty() {
+            continue;
+        } else if line == "inArgs:" {
+            while let Some(next_line) = lines.peek()
+                && let Some(item) = next_line.trim_start().strip_prefix("- ")
+            {
+                lines.next();
+                let item = item.trim();
+                let (stringname, opts) = parse_prop_item(item);
+
+                let Some(&prop_cname) = stringname_to_cname.get(stringname) else {
+                    err_continue!(ActiondefError::ActiondefUndefinedInArg {
+                        stringname: stringname.to_owned(),
+                    });
+                };
+
+                if !opts.is_empty() {
+                    err_continue!(ActiondefError::ActiondefInArgWithOptions {
+                        in_arg_cname: prop_cname.to_owned(),
+                    });
+                }
+
+                in_args.insert(prop_cname.to_owned());
+            }
+        } else if line == "outArgs:" {
+            while let Some(next_line) = lines.peek()
+                && let Some(item) = next_line.trim_start().strip_prefix("- ")
+            {
+                lines.next();
+                let item = item.trim();
+                let (stringname, opts) = parse_prop_item(item);
+
+                let Some(&prop_cname) = stringname_to_cname.get(stringname) else {
+                    err_continue!(ActiondefError::ActiondefUndefinedOutArg {
+                        stringname: stringname.to_owned(),
+                    });
+                };
+
+                if !opts.is_empty() {
+                    err_continue!(ActiondefError::ActiondefOutArgWithOptions {
+                        out_arg_cname: prop_cname.to_owned(),
+                    });
+                }
+
+                out_args.insert(prop_cname.to_owned());
+            }
+        } else if line == "outArgs: []" {
+            tracing::warn!(
+                "parse_actiondef: Remove the `outArgs: []` branch after we update `vendor/openfx` to a commit that no longer includes this any more."
+            )
+        } else {
+            tracing::warn!(
+                "parse_actiondef: {cname}: unrecognized line that will be ignored: {line}"
+            );
+        }
+    }
+
+    Some(ActiondefMetadataEntry { in_args, out_args })
 }
 
 fn extract_stringname_to_cname(
@@ -638,10 +720,10 @@ impl<'a> Iterator for ExtractedCommentIterator<'a> {
 }
 
 enum MetadataSection<'a> {
-    Propdef(std::str::Lines<'a>),
-    Propset(&'a str, std::str::Lines<'a>),
-    Propsetdef(&'a str, std::str::Lines<'a>),
-    Actiondef(std::str::Lines<'a>),
+    Propdef(SignificantLines<'a>),
+    Propset(&'a str, SignificantLines<'a>),
+    Propsetdef(&'a str, SignificantLines<'a>),
+    Actiondef(SignificantLines<'a>),
 }
 
 fn extract_metadata_section<'a>(
@@ -660,7 +742,7 @@ fn extract_metadata_section<'a>(
             "@propdef" => {
                 let rest = rest.trim();
                 if rest.is_empty() {
-                    return Some(MetadataSection::Propdef(lines));
+                    return Some(MetadataSection::Propdef(SignificantLines::new(lines)));
                 } else {
                     err.propdef_errors.push((
                         cname.unwrap_or("?").to_owned(),
@@ -677,7 +759,7 @@ fn extract_metadata_section<'a>(
                     err.propset_without_name_count += 1;
                     return None;
                 } else {
-                    return Some(MetadataSection::Propset(rest, lines));
+                    return Some(MetadataSection::Propset(rest, SignificantLines::new(lines)));
                 }
             }
             "@propsetdef" => {
@@ -686,15 +768,23 @@ fn extract_metadata_section<'a>(
                     err.propsetdef_without_name_count += 1;
                     return None;
                 } else {
-                    return Some(MetadataSection::Propsetdef(rest, lines));
+                    return Some(MetadataSection::Propsetdef(
+                        rest,
+                        SignificantLines::new(lines),
+                    ));
                 }
             }
             "@actiondef" => {
                 let rest = rest.trim();
                 if rest.is_empty() {
-                    return Some(MetadataSection::Actiondef(lines));
+                    return Some(MetadataSection::Actiondef(SignificantLines::new(lines)));
                 } else {
-                    err.actiondef_entries_with_names.insert(rest.to_string());
+                    err.actiondef_errors.push((
+                        cname.unwrap_or("?").to_owned(),
+                        ActiondefError::ActiondefWithName {
+                            name: rest.to_owned(),
+                        },
+                    ));
                     return None;
                 }
             }
