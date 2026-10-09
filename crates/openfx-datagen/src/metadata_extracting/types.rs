@@ -18,7 +18,9 @@ impl Metadata {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 pub struct PropdefMetadataEntry {
     pub r#type: PropdefType,
     pub dimension: PropdefDimension,
@@ -40,7 +42,9 @@ pub struct PropdefMetadataEntry {
     pub cname: Option<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 #[serde(tag = "$type")]
 pub enum PropdefType {
     Simple {
@@ -75,7 +79,9 @@ pub enum PropdefTypeSimple {
     Pointer,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 #[serde(tag = "$type")]
 pub enum StringEnumVariant {
     Defined { cname: String },
@@ -90,14 +96,18 @@ impl PropdefType {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 #[serde(tag = "$type")]
 pub enum PropdefDimension {
     Fixed { size: usize },
     Dynamic,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 pub struct PropsetMetadataEntry {
     pub write: WriteSide,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
@@ -106,7 +116,9 @@ pub struct PropsetMetadataEntry {
     pub props_refs: BTreeSet<String>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 pub enum WriteSide {
     Host,
     Plugin,
@@ -122,7 +134,9 @@ impl WriteSide {
     }
 }
 
-#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Default, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 pub struct PropValue {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub host_optional: bool,
@@ -182,20 +196,19 @@ impl PropValue {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 pub struct PropsetdefMetadataEntry {
     pub props: BTreeMap<String, PropValue>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 pub struct ActiondefMetadataEntry {
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub in_args: BTreeSet<String>,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub out_args: BTreeSet<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
-pub enum Todo {
-    TODO { content: String },
 }

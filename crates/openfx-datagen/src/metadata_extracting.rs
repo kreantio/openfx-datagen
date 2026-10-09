@@ -13,6 +13,9 @@ pub use crate::metadata_extracting::{errors::*, types::*};
 mod errors;
 mod types;
 
+#[cfg(test)]
+mod tests;
+
 pub fn extract_metadata(
     input: &BTreeMap<String, BindingsUnprocessed>,
 ) -> Result<Metadata, Box<Error>> {
@@ -291,7 +294,7 @@ fn parse_propdef(
                 });
             }
             optional = true;
-        } else if let Some(value) = line.strip_prefix("cname") {
+        } else if let Some(value) = line.strip_prefix("cname: ") {
             tracing::warn!("parse_propdef: {cname}: found redundant `cname`: {value}");
 
             if prop_cname.is_some() {
