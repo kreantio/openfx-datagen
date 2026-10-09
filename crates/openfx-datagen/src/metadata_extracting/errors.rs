@@ -7,8 +7,9 @@ pub struct Error {
     /// with.
     pub propdef_errors: Vec<(String, PropdefError)>,
 
-    pub propset_entries_on_items: HashSet<String>,
     pub propset_without_name_count: usize,
+    /// The keys are the names of the `@propset`s.
+    pub propset_errors: Vec<(String, PropsetError)>,
 
     pub propsetdef_entries_on_items: HashSet<String>,
     pub propsetdef_without_name_count: usize,
@@ -21,8 +22,8 @@ impl Error {
     pub fn is_empty(&self) -> bool {
         self.propdef_not_on_item_count == 0
             && self.propdef_errors.is_empty()
-            && self.propset_entries_on_items.is_empty()
             && self.propset_without_name_count == 0
+            && self.propset_errors.is_empty()
             && self.propsetdef_entries_on_items.is_empty()
             && self.propsetdef_without_name_count == 0
             && self.actiondef_not_on_item_count == 0
@@ -53,5 +54,41 @@ pub enum PropdefError {
     PropdefNonEnumWithValuesField,
     PropdefUnsupportedValueLineInValues {
         line_content: String,
+    },
+}
+
+#[derive(Debug, snafu::Snafu)]
+pub enum PropsetError {
+    PropsetOnItem {
+        item_cname: String,
+    },
+    /// `write: ` field is required, but is missing.
+    PropsetIncomplete {
+        missing_write: bool,
+    },
+    PropsetUnexpectedFieldValue {
+        field_name: String,
+        value: String,
+    },
+    PropsetDuplicateField {
+        field_name: String,
+    },
+    PropsetUndefinedProp {
+        stringname: String,
+    },
+    PropsetPropDuplicate {
+        prop_cname: String,
+    },
+    PropsetPropsRefWithOptions {
+        props_ref_cname: String,
+    },
+    PropsetPropUnexpectedOption {
+        prop_cname: String,
+        option_name: String,
+        option_value: String,
+    },
+    PropsetPropDuplicateOption {
+        prop_cname: String,
+        option_name: String,
     },
 }

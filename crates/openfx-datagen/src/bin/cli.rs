@@ -91,7 +91,7 @@ fn gen_data(cmd: CommandGenData) -> Result<(), Box<dyn std::error::Error + Send 
         std::fs::create_dir_all(&output_metadata_path)?;
 
         let metadata = extract_metadata(&parsed_headers)?;
-        let output_path = output_metadata_path.join("metadata.json");
+        let output_path = output_metadata_path.join("raw.json");
         let file = std::fs::File::create(&output_path)?;
         serde_json::to_writer_pretty(file, &metadata)?;
     }

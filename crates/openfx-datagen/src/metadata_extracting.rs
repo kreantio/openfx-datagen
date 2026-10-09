@@ -16,8 +16,6 @@ pub fn extract_metadata(
     let stringname_to_cname = extract_stringname_to_cname(input);
     let comment_iter = ExtractedCommentIterator::new(input);
 
-    tracing::info!("{:?}", stringname_to_cname);
-
     let mut error = Error::default();
     let mut metadata = Metadata::default();
 
@@ -40,15 +38,20 @@ pub fn extract_metadata(
             }
             MetadataSection::Propset(name, lines) => {
                 if let Some(cname) = cname {
-                    error.propset_entries_on_items.insert(cname.to_string());
+                    error.propset_errors.push((
+                        name.to_string(),
+                        PropsetError::PropsetOnItem {
+                            item_cname: cname.to_owned(),
+                        },
+                    ));
                     continue;
                 }
-                metadata.propset_map.insert(
-                    name.to_string(),
-                    Todo::TODO {
-                        content: lines.collect::<Vec<_>>().join("\n"),
-                    },
-                );
+
+                if let Some(entry) =
+                    parse_propset(name, lines.peekable(), &mut error, &stringname_to_cname)
+                {
+                    metadata.propset_map.insert(name.to_string(), entry);
+                }
             }
             MetadataSection::Propsetdef(name, lines) => {
                 if let Some(cname) = cname {
@@ -338,26 +341,18 @@ fn parse_propdef(
         }
     }
 
-    let Some(mut r#type) = r#type else {
+    if r#type.is_none() || dimension.is_none() {
         error.propdef_errors.push((
             cname.to_owned(),
             PropdefError::PropdefIncomplete {
-                missing_type: true,
+                missing_type: r#type.is_none(),
                 missing_dimension: dimension.is_none(),
             },
         ));
         return None;
-    };
-    let Some(dimension) = dimension else {
-        error.propdef_errors.push((
-            cname.to_owned(),
-            PropdefError::PropdefIncomplete {
-                missing_type: false,
-                missing_dimension: true,
-            },
-        ));
-        return None;
-    };
+    }
+    let mut r#type = r#type.unwrap();
+    let dimension = dimension.unwrap();
 
     match &mut r#type {
         PropdefType::Simple { .. } => {
@@ -390,6 +385,177 @@ fn parse_propdef(
         host_optional,
         optional,
         cname: prop_cname,
+    })
+}
+
+fn parse_propset(
+    name: &str,
+    mut lines: Peekable<std::str::Lines>,
+    error: &mut Error,
+    stringname_to_cname: &HashMap<&str, &str>,
+) -> Option<PropsetMetadataEntry> {
+    let mut write: Option<WriteSide> = None;
+    let mut props: BTreeMap<String, PropsetPropValue> = BTreeMap::new();
+    let mut props_refs: BTreeSet<String> = BTreeSet::new();
+
+    while let Some(line) = lines.next() {
+        let line = line.trim();
+
+        if line.is_empty() {
+            continue;
+        } else if let Some(value) = line.strip_prefix("write: ") {
+            if write.is_some() {
+                error.propset_errors.push((
+                    name.to_owned(),
+                    PropsetError::PropsetDuplicateField {
+                        field_name: "write".to_owned(),
+                    },
+                ));
+                continue;
+            }
+            write = match WriteSide::try_from(value) {
+                Some(value) => Some(value),
+                None => {
+                    error.propset_errors.push((
+                        name.to_owned(),
+                        PropsetError::PropsetUnexpectedFieldValue {
+                            field_name: "write".to_owned(),
+                            value: value.to_owned(),
+                        },
+                    ));
+                    continue;
+                }
+            };
+        } else if line == "props:" {
+            while let Some(next_line) = lines.peek()
+                && let Some(item) = next_line.trim_start().strip_prefix("- ")
+            {
+                lines.next();
+                let item = item.trim();
+                let (stringname, opts) = parse_prop_item(item);
+
+                if let Some(props_ref_name) = stringname.strip_suffix("_REF") {
+                    if !opts.is_empty() {
+                        error.propset_errors.push((
+                            name.to_owned(),
+                            PropsetError::PropsetPropsRefWithOptions {
+                                props_ref_cname: props_ref_name.to_owned(),
+                            },
+                        ));
+                        continue;
+                    }
+
+                    props_refs.insert(props_ref_name.to_owned());
+                    continue;
+                }
+
+                let Some(&prop_cname) = stringname_to_cname.get(stringname) else {
+                    error.propset_errors.push((
+                        name.to_owned(),
+                        PropsetError::PropsetUndefinedProp {
+                            stringname: stringname.to_owned(),
+                        },
+                    ));
+                    continue;
+                };
+
+                let mut value = PropsetPropValue::default();
+
+                for (opt_name, opt_value) in opts {
+                    match opt_name {
+                        "host_optional" => {
+                            if value.host_optional {
+                                error.propset_errors.push((
+                                    name.to_owned(),
+                                    PropsetError::PropsetPropDuplicateOption {
+                                        prop_cname: prop_cname.to_owned(),
+                                        option_name: "host_optional".to_owned(),
+                                    },
+                                ));
+                                continue;
+                            }
+                            value.host_optional = true;
+                        }
+                        "write" => {
+                            if value.write.is_some() {
+                                error.propset_errors.push((
+                                    name.to_owned(),
+                                    PropsetError::PropsetPropDuplicateOption {
+                                        prop_cname: prop_cname.to_owned(),
+                                        option_name: "write".to_owned(),
+                                    },
+                                ));
+                                continue;
+                            }
+                            value.write = match WriteSide::try_from(opt_value) {
+                                Some(value) => Some(value),
+                                None => {
+                                    error.propset_errors.push((
+                                        name.to_owned(),
+                                        PropsetError::PropsetPropUnexpectedOption {
+                                            prop_cname: prop_cname.to_owned(),
+                                            option_name: "write".to_owned(),
+                                            option_value: opt_value.to_owned(),
+                                        },
+                                    ));
+                                    continue;
+                                }
+                            };
+                        }
+                        _ => {
+                            error.propset_errors.push((
+                                name.to_owned(),
+                                PropsetError::PropsetPropUnexpectedOption {
+                                    prop_cname: prop_cname.to_owned(),
+                                    option_name: opt_name.to_owned(),
+                                    option_value: opt_value.to_owned(),
+                                },
+                            ));
+                        }
+                    }
+                }
+
+                match props.entry(prop_cname.to_owned()) {
+                    std::collections::btree_map::Entry::Vacant(entry) => {
+                        entry.insert(value);
+                    }
+                    std::collections::btree_map::Entry::Occupied(_) => {
+                        if prop_cname == "kOfxImageEffectPluginRenderThreadSafety" {
+                            // TODO: report this to the upstream.
+                            tracing::warn!(
+                                "parse_propset: Don't forget to report this to the upstream!!!: {prop_cname}"
+                            );
+                            continue;
+                        } else {
+                            error.propset_errors.push((
+                                name.to_owned(),
+                                PropsetError::PropsetPropDuplicate {
+                                    prop_cname: prop_cname.to_owned(),
+                                },
+                            ));
+                        }
+                    }
+                }
+            }
+        } else {
+            tracing::warn!("parse_propset: {name}: unrecognized line that will be ignored: {line}");
+        }
+    }
+
+    let Some(write) = write else {
+        error.propset_errors.push((
+            name.to_owned(),
+            PropsetError::PropsetIncomplete {
+                missing_write: true,
+            },
+        ));
+        return None;
+    };
+
+    Option::Some(PropsetMetadataEntry {
+        write,
+        props,
+        props_refs,
     })
 }
 
@@ -581,4 +747,23 @@ fn strip_prefix_word(s: &str) -> Option<(&str, &str)> {
     let first = parts.next()?;
     let rest = parts.next().unwrap_or("").trim_start();
     Some((first, rest))
+}
+
+fn parse_prop_item(prop_item: &str) -> (&str, HashMap<&str, &str>) {
+    let (stringname, rest) = prop_item.split_once("|").unwrap_or((prop_item, ""));
+    let stringname = stringname.trim();
+    if rest.is_empty() {
+        return (stringname, HashMap::new());
+    }
+
+    let mut opts: HashMap<&str, &str> = HashMap::new();
+
+    if rest.matches("=").count() > 1 {
+        todo!("parse_prop_item: Support multiple options.")
+    }
+
+    let (key, value) = rest.split_once("=").unwrap_or((rest, ""));
+    opts.insert(key.trim(), value.trim());
+
+    (stringname, opts)
 }

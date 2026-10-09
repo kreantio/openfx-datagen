@@ -3,10 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct Metadata {
     pub propdef_map: BTreeMap<String, PropdefMetadataEntry>,
-    // pub propset_map: BTreeMap<String, PropsetMetadataEntry>,
+    pub propset_map: BTreeMap<String, PropsetMetadataEntry>,
     // pub propsetdef_map: BTreeMap<String, PropsetdefMetadataEntry>,
     // pub actiondef_map: BTreeMap<String, ActiondefMetadataEntry>,
-    pub propset_map: BTreeMap<String, Todo>,
     pub propsetdef_map: BTreeMap<String, Todo>,
     pub actiondef_map: BTreeMap<String, Todo>,
 }
@@ -105,10 +104,22 @@ pub enum WriteSide {
     Plugin,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
+impl WriteSide {
+    pub fn try_from(value: &str) -> Option<Self> {
+        match value {
+            "host" => Some(Self::Host),
+            "plugin" => Some(Self::Plugin),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct PropsetPropValue {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub host_optional: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub write: Option<WriteSide>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
