@@ -1,57 +1,28 @@
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    iter::Peekable,
+};
 
 use crate::parsing::{BindingsUnprocessed, DefineValue, RootItem, RootItemWithCommentAbove};
 
-#[derive(Debug, snafu::Snafu, Default)]
-pub struct Error {
-    propdef_not_on_item_count: usize,
-    propdef_with_name: HashSet<String>,
+pub use crate::metadata_extracting::{errors::*, types::*};
 
-    propset_on_item: HashSet<String>,
-    propset_without_name_count: usize,
+mod errors;
+mod types;
 
-    propsetdef_on_item: HashSet<String>,
-    propsetdef_without_name_count: usize,
-
-    actiondef_not_on_item_count: usize,
-    actiondef_with_name: HashSet<String>,
-}
-
-impl Error {
-    pub fn is_empty(&self) -> bool {
-        self.propdef_not_on_item_count == 0
-            && self.propdef_with_name.is_empty()
-            && self.propset_on_item.is_empty()
-            && self.propset_without_name_count == 0
-            && self.propsetdef_on_item.is_empty()
-            && self.propsetdef_without_name_count == 0
-            && self.actiondef_not_on_item_count == 0
-            && self.actiondef_with_name.is_empty()
-    }
-}
-
-#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
-pub struct Metadata {
-    propdef_map: BTreeMap<String, Todo>,
-    propset_map: BTreeMap<String, Todo>,
-    propsetdef_map: BTreeMap<String, Todo>,
-    actiondef_map: BTreeMap<String, Todo>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
-pub enum Todo {
-    TODO { content: String },
-}
-
-pub fn extract_metadata(input: &BTreeMap<String, BindingsUnprocessed>) -> Result<Metadata, Error> {
-    let _stringname_to_cname = extract_stringname_to_cname(input);
+pub fn extract_metadata(
+    input: &BTreeMap<String, BindingsUnprocessed>,
+) -> Result<Metadata, Box<Error>> {
+    let stringname_to_cname = extract_stringname_to_cname(input);
     let comment_iter = ExtractedCommentIterator::new(input);
+
+    tracing::info!("{:?}", stringname_to_cname);
 
     let mut error = Error::default();
     let mut metadata = Metadata::default();
 
     for ExtractedComment { cname, content } in comment_iter {
-        let Some(section) = extract_metadata_section(&content, &mut error) else {
+        let Some(section) = extract_metadata_section(&content, &mut error, cname.as_deref()) else {
             continue;
         };
         match section {
@@ -60,16 +31,16 @@ pub fn extract_metadata(input: &BTreeMap<String, BindingsUnprocessed>) -> Result
                     error.propdef_not_on_item_count += 1;
                     continue;
                 };
-                metadata.propdef_map.insert(
-                    cname.to_string(),
-                    Todo::TODO {
-                        content: lines.collect::<Vec<_>>().join("\n"),
-                    },
-                );
+
+                if let Some(entry) =
+                    parse_propdef(&cname, lines.peekable(), &mut error, &stringname_to_cname)
+                {
+                    metadata.propdef_map.insert(cname.to_string(), entry);
+                }
             }
             MetadataSection::Propset(name, lines) => {
                 if let Some(cname) = cname {
-                    error.propset_on_item.insert(cname.to_string());
+                    error.propset_entries_on_items.insert(cname.to_string());
                     continue;
                 }
                 metadata.propset_map.insert(
@@ -81,7 +52,7 @@ pub fn extract_metadata(input: &BTreeMap<String, BindingsUnprocessed>) -> Result
             }
             MetadataSection::Propsetdef(name, lines) => {
                 if let Some(cname) = cname {
-                    error.propsetdef_on_item.insert(cname.to_string());
+                    error.propsetdef_entries_on_items.insert(cname.to_string());
                     continue;
                 }
                 metadata.propsetdef_map.insert(
@@ -107,18 +78,329 @@ pub fn extract_metadata(input: &BTreeMap<String, BindingsUnprocessed>) -> Result
     }
 
     if !error.is_empty() {
-        return Err(error);
+        return Err(Box::new(error));
     }
 
     Ok(metadata)
 }
 
-pub fn extract_stringname_to_cname(
+fn parse_propdef(
+    cname: &str,
+    mut lines: Peekable<std::str::Lines>,
+    error: &mut Error,
+    stringname_to_cname: &HashMap<&str, &str>,
+) -> Option<PropdefMetadataEntry> {
+    let mut r#type: Option<PropdefType> = None;
+    let mut values: Vec<StringEnumVariant> = vec![];
+    let mut dimension: Option<PropdefDimension> = None;
+    let mut introduced: Option<String> = None;
+    let mut deprecated: Option<String> = None;
+    let mut host_optional: bool = false;
+    let mut optional: bool = false;
+    let mut prop_cname: Option<String> = None;
+
+    while let Some(line) = lines.next() {
+        let line = line.trim();
+
+        if line.is_empty() {
+            continue;
+        } else if let Some(value) = line.strip_prefix("type: ") {
+            if r#type.is_some() {
+                error.propdef_errors.push((
+                    cname.to_owned(),
+                    PropdefError::PropdefDuplicateField {
+                        field_name: "type".to_owned(),
+                    },
+                ));
+                continue;
+            }
+
+            let value = value.trim();
+            r#type = match value {
+                "int" => Some(PropdefType::new_one(PropdefTypeSimple::Int)),
+                "double" => Some(PropdefType::new_one(PropdefTypeSimple::Double)),
+                "bool" => Some(PropdefType::new_one(PropdefTypeSimple::Bool)),
+                "string" => Some(PropdefType::new_one(PropdefTypeSimple::String)),
+                "pointer" => Some(PropdefType::new_one(PropdefTypeSimple::Pointer)),
+                "enum" => Some(PropdefType::StringEnum {
+                    one_of: Default::default(),
+                }),
+                _ if let Some(value) = value.strip_prefix("[")
+                    && let Some(value) = value.strip_suffix("]") =>
+                {
+                    let mut one_of: BTreeSet<PropdefTypeSimple> = BTreeSet::new();
+                    for ty in value.split(',') {
+                        let ty = ty.trim();
+                        let ty = match ty {
+                            "int" => PropdefTypeSimple::Int,
+                            "double" => PropdefTypeSimple::Double,
+                            "bool" => PropdefTypeSimple::Bool,
+                            "string" => PropdefTypeSimple::String,
+                            "pointer" => PropdefTypeSimple::Pointer,
+                            _ => {
+                                error.propdef_errors.push((
+                                    cname.to_owned(),
+                                    PropdefError::PropdefUnexpectedFieldValue {
+                                        field_name: "type".to_owned(),
+                                        value: ty.to_owned(),
+                                    },
+                                ));
+                                continue;
+                            }
+                        };
+                        one_of.insert(ty);
+                    }
+                    Some(PropdefType::Simple { one_of })
+                }
+                _ => {
+                    error.propdef_errors.push((
+                        cname.to_owned(),
+                        PropdefError::PropdefUnexpectedFieldValue {
+                            field_name: "type".to_owned(),
+                            value: value.to_owned(),
+                        },
+                    ));
+                    continue;
+                }
+            }
+        } else if line == "values:" {
+            while let Some(next_line) = lines.peek()
+                && let Some(stringname) = next_line.trim_start().strip_prefix("- ")
+            {
+                lines.next();
+                let stringname = stringname.trim();
+                let variant = if let Some(stringname) = stringname.strip_prefix("\"") {
+                    let Some(stringname) = stringname.strip_suffix("\"") else {
+                        todo!()
+                    };
+                    if stringname
+                        .find(|c: char| !c.is_ascii_alphanumeric() && !c.is_whitespace())
+                        .is_some()
+                    {
+                        // Being conservative here because we don't yet know how
+                        // escaping would work.
+                        error.propdef_errors.push((
+                            cname.to_owned(),
+                            PropdefError::PropdefUnexpectedFieldValue {
+                                field_name: "values".to_owned(),
+                                value: stringname.to_owned(),
+                            },
+                        ));
+                        continue;
+                    }
+                    StringEnumVariant::Literal {
+                        value: stringname.to_owned(),
+                    }
+                } else if let Some(&cname) = stringname_to_cname.get(stringname) {
+                    StringEnumVariant::Defined {
+                        cname: cname.to_owned(),
+                    }
+                } else {
+                    if stringname
+                        .find(|c: char| c.is_whitespace() || c == '|')
+                        .is_some()
+                    {
+                        // must be a new syntax.
+                        error.propdef_errors.push((
+                            cname.to_owned(),
+                            PropdefError::PropdefUnexpectedFieldValue {
+                                field_name: "values".to_owned(),
+                                value: stringname.to_owned(),
+                            },
+                        ));
+                        continue;
+                    }
+                    StringEnumVariant::Literal {
+                        value: stringname.to_owned(),
+                    }
+                };
+                values.push(variant);
+            }
+        } else if let Some(value) = line.strip_prefix("dimension: ") {
+            if dimension.is_some() {
+                error.propdef_errors.push((
+                    cname.to_owned(),
+                    PropdefError::PropdefUnexpectedFieldValue {
+                        field_name: "dimension".to_owned(),
+                        value: value.to_owned(),
+                    },
+                ));
+                continue;
+            }
+
+            let value = value.trim();
+            if value == "N" {
+                dimension = Some(PropdefDimension::Dynamic);
+            } else if let Ok(n) = value.parse::<usize>() {
+                dimension = Some(PropdefDimension::Fixed { size: n });
+            } else {
+                error.propdef_errors.push((
+                    cname.to_owned(),
+                    PropdefError::PropdefUnexpectedFieldValue {
+                        field_name: "dimension".to_owned(),
+                        value: value.to_owned(),
+                    },
+                ));
+                continue;
+            }
+        } else if let Some(value) = line.strip_prefix("introduced: ") {
+            if introduced.is_some() {
+                error.propdef_errors.push((
+                    cname.to_owned(),
+                    PropdefError::PropdefUnexpectedFieldValue {
+                        field_name: "introduced".to_owned(),
+                        value: value.to_owned(),
+                    },
+                ));
+                continue;
+            }
+
+            let value = value.trim();
+            introduced = Some(value.to_owned());
+        } else if let Some(value) = line.strip_prefix("added: ") {
+            tracing::warn!(
+                "parse_propdef: {cname}:found `added: `, will treat it as `introduced: `."
+            );
+            if introduced.is_some() {
+                error.propdef_errors.push((
+                    cname.to_owned(),
+                    PropdefError::PropdefUnexpectedFieldValue {
+                        field_name: "introduced".to_owned(),
+                        value: value.to_owned(),
+                    },
+                ));
+                continue;
+            }
+
+            let value = value.trim();
+            introduced = Some(value.to_owned());
+        } else if let Some(value) = line.strip_prefix("deprecated: ") {
+            if deprecated.is_some() {
+                error.propdef_errors.push((
+                    cname.to_owned(),
+                    PropdefError::PropdefUnexpectedFieldValue {
+                        field_name: "deprecated".to_owned(),
+                        value: value.to_owned(),
+                    },
+                ));
+                continue;
+            }
+
+            let value = value.trim();
+            deprecated = Some(value.to_owned());
+        } else if line == "hostOptional: true" {
+            if host_optional {
+                error.propdef_errors.push((
+                    cname.to_owned(),
+                    PropdefError::PropdefUnexpectedFieldValue {
+                        field_name: "hostOptional".to_owned(),
+                        value: "true".to_owned(),
+                    },
+                ));
+                continue;
+            }
+            host_optional = true;
+        } else if line == "optional: true" {
+            if optional {
+                error.propdef_errors.push((
+                    cname.to_owned(),
+                    PropdefError::PropdefUnexpectedFieldValue {
+                        field_name: "optional".to_owned(),
+                        value: "true".to_owned(),
+                    },
+                ));
+                continue;
+            }
+            optional = true;
+        } else if let Some(value) = line.strip_prefix("cname") {
+            tracing::warn!("parse_propdef: {cname}: found redundant `cname`: {value}");
+
+            if prop_cname.is_some() {
+                error.propdef_errors.push((
+                    cname.to_owned(),
+                    PropdefError::PropdefUnexpectedFieldValue {
+                        field_name: "cname".to_owned(),
+                        value: value.to_owned(),
+                    },
+                ));
+                continue;
+            }
+
+            let value = value.trim();
+            prop_cname = Some(value.to_owned());
+        } else {
+            tracing::warn!(
+                "parse_propdef: {cname}: unrecognized line that will be ignored: {line}"
+            );
+        }
+    }
+
+    let Some(mut r#type) = r#type else {
+        error.propdef_errors.push((
+            cname.to_owned(),
+            PropdefError::PropdefIncomplete {
+                missing_type: true,
+                missing_dimension: dimension.is_none(),
+            },
+        ));
+        return None;
+    };
+    let Some(dimension) = dimension else {
+        error.propdef_errors.push((
+            cname.to_owned(),
+            PropdefError::PropdefIncomplete {
+                missing_type: false,
+                missing_dimension: true,
+            },
+        ));
+        return None;
+    };
+
+    match &mut r#type {
+        PropdefType::Simple { .. } => {
+            if !values.is_empty() {
+                error.propdef_errors.push((
+                    cname.to_owned(),
+                    PropdefError::PropdefNonEnumWithValuesField,
+                ));
+                return None;
+            }
+        }
+        PropdefType::StringEnum { one_of } => {
+            if values.is_empty() {
+                error.propdef_errors.push((
+                    cname.to_owned(),
+                    PropdefError::PropdefEnumWithoutValuesField,
+                ));
+                return None;
+            }
+            debug_assert!(one_of.is_empty());
+            *one_of = values;
+        }
+    }
+
+    Some(PropdefMetadataEntry {
+        r#type,
+        dimension,
+        introduced,
+        deprecated,
+        host_optional,
+        optional,
+        cname: prop_cname,
+    })
+}
+
+fn extract_stringname_to_cname(
     input: &BTreeMap<String, BindingsUnprocessed>,
 ) -> HashMap<&str, &str> {
     let mut stringname_to_cname: HashMap<&str, &str> = HashMap::new();
 
-    for bindings in input.values() {
+    for (file_name, bindings) in input {
+        if file_name.starts_with("ofx-") {
+            // Skip the default colospace header.
+            continue;
+        }
+
         for item in &bindings.items {
             let RootItemWithCommentAbove::Item { item, .. } = item else {
                 continue;
@@ -133,12 +415,15 @@ pub fn extract_stringname_to_cname(
             let DefineValue::StringLiteral { value } = value else {
                 continue;
             };
-            match stringname_to_cname.entry(name.as_str()) {
+            match stringname_to_cname.entry(value.as_str()) {
                 std::collections::hash_map::Entry::Vacant(entry) => {
-                    entry.insert(value.as_str());
+                    entry.insert(name.as_str());
                 }
                 std::collections::hash_map::Entry::Occupied(_) => {
-                    todo!("Handle this if this happens in the future.")
+                    todo!(
+                        "Handle this if this happens in the future: {}",
+                        value.as_str()
+                    )
                 }
             }
         }
@@ -147,7 +432,7 @@ pub fn extract_stringname_to_cname(
     stringname_to_cname
 }
 
-pub struct ExtractedComment {
+struct ExtractedComment {
     cname: Option<String>,
     content: String,
 }
@@ -226,7 +511,11 @@ enum MetadataSection<'a> {
     Actiondef(std::str::Lines<'a>),
 }
 
-fn extract_metadata_section<'a>(comment: &'a str, err: &mut Error) -> Option<MetadataSection<'a>> {
+fn extract_metadata_section<'a>(
+    comment: &'a str,
+    err: &mut Error,
+    cname: Option<&str>,
+) -> Option<MetadataSection<'a>> {
     let mut lines = comment.lines();
 
     while let Some(line) = lines.next() {
@@ -240,7 +529,12 @@ fn extract_metadata_section<'a>(comment: &'a str, err: &mut Error) -> Option<Met
                 if rest.is_empty() {
                     return Some(MetadataSection::Propdef(lines));
                 } else {
-                    err.propdef_with_name.insert(rest.to_string());
+                    err.propdef_errors.push((
+                        cname.unwrap_or("?").to_owned(),
+                        PropdefError::PropdefWithName {
+                            name: rest.to_owned(),
+                        },
+                    ));
                     return None;
                 }
             }
@@ -267,7 +561,7 @@ fn extract_metadata_section<'a>(comment: &'a str, err: &mut Error) -> Option<Met
                 if rest.is_empty() {
                     return Some(MetadataSection::Actiondef(lines));
                 } else {
-                    err.actiondef_with_name.insert(rest.to_string());
+                    err.actiondef_entries_with_names.insert(rest.to_string());
                     return None;
                 }
             }
