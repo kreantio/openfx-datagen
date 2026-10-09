@@ -11,8 +11,8 @@ pub struct Error {
     /// The keys are the names of the `@propset`s.
     pub propset_errors: Vec<(String, PropsetError)>,
 
-    pub propsetdef_entries_on_items: HashSet<String>,
     pub propsetdef_without_name_count: usize,
+    pub propsetdef_errors: Vec<(String, PropsetdefError)>,
 
     pub actiondef_not_on_item_count: usize,
     pub actiondef_entries_with_names: HashSet<String>,
@@ -24,7 +24,7 @@ impl Error {
             && self.propdef_errors.is_empty()
             && self.propset_without_name_count == 0
             && self.propset_errors.is_empty()
-            && self.propsetdef_entries_on_items.is_empty()
+            && self.propsetdef_errors.is_empty()
             && self.propsetdef_without_name_count == 0
             && self.actiondef_not_on_item_count == 0
             && self.actiondef_entries_with_names.is_empty()
@@ -82,18 +82,42 @@ pub enum PropsetError {
     PropsetPropsRefWithOptions {
         props_ref_cname: String,
     },
-    PropsetPropUnexpectedOption {
+    PropsetPropValueError {
         prop_cname: String,
+        #[snafu(source)]
+        error: PropValueError,
+    },
+}
+
+#[derive(Debug, snafu::Snafu)]
+pub enum PropsetdefError {
+    PropsetdefOnItem {
+        item_cname: String,
+    },
+    PropsetdefUndefinedProp {
+        stringname: String,
+    },
+    PropsetdefPropDuplicate {
+        prop_cname: String,
+    },
+    PropsetdefPropValueError {
+        prop_cname: String,
+        #[snafu(source)]
+        error: PropValueError,
+    },
+}
+
+#[derive(Debug, snafu::Snafu)]
+pub enum PropValueError {
+    PropValueUnexpectedOption {
         option_name: String,
         option_value: String,
     },
-    PropsetPropUnexpectedOptionValue {
-        prop_cname: String,
+    PropValueUnexpectedOptionValue {
         option_name: String,
         option_value: String,
     },
-    PropsetPropDuplicateOption {
-        prop_cname: String,
+    PropValueDuplicateOption {
         option_name: String,
     },
 }

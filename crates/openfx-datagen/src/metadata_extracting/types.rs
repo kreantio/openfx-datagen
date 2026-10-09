@@ -1,14 +1,13 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use crate::utils::write_schema_json_pretty;
+use crate::{metadata_extracting::PropValueError, utils::write_schema_json_pretty};
 
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
 pub struct Metadata {
     pub propdef_map: BTreeMap<String, PropdefMetadataEntry>,
     pub propset_map: BTreeMap<String, PropsetMetadataEntry>,
-    // pub propsetdef_map: BTreeMap<String, PropsetdefMetadataEntry>,
+    pub propsetdef_map: BTreeMap<String, PropsetdefMetadataEntry>,
     // pub actiondef_map: BTreeMap<String, ActiondefMetadataEntry>,
-    pub propsetdef_map: BTreeMap<String, Todo>,
     pub actiondef_map: BTreeMap<String, Todo>,
 }
 
@@ -103,7 +102,7 @@ pub enum PropdefDimension {
 pub struct PropsetMetadataEntry {
     pub write: WriteSide,
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
-    pub props: BTreeMap<String, PropsetPropValue>,
+    pub props: BTreeMap<String, PropValue>,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub props_refs: BTreeSet<String>,
 }
@@ -125,21 +124,68 @@ impl WriteSide {
 }
 
 #[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
-pub struct PropsetPropValue {
+pub struct PropValue {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub host_optional: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub write: Option<WriteSide>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
-pub struct PropsetdefMetadataEntry {
-    pub propes: BTreeMap<String, PropsetdefPropValue>,
+impl PropValue {
+    pub fn try_from_options(opts: HashMap<&str, &str>) -> Result<PropValue, Vec<PropValueError>> {
+        let mut value = Self::default();
+        let mut errors = vec![];
+
+        for (opt_name, opt_value) in opts {
+            match opt_name {
+                "host_optional" => {
+                    if value.host_optional {
+                        errors.push(PropValueError::PropValueDuplicateOption {
+                            option_name: "host_optional".to_owned(),
+                        });
+                        continue;
+                    }
+                    value.host_optional = true;
+                }
+                "write" => {
+                    if value.write.is_some() {
+                        errors.push(PropValueError::PropValueDuplicateOption {
+                            option_name: "write".to_owned(),
+                        });
+                        continue;
+                    }
+                    value.write = match WriteSide::try_from(opt_value) {
+                        Some(write_side) => Some(write_side),
+                        None => {
+                            errors.push(PropValueError::PropValueUnexpectedOptionValue {
+                                option_name: "write".to_owned(),
+                                option_value: opt_value.to_owned(),
+                            });
+                            continue;
+                        }
+                    }
+                }
+                _ => {
+                    errors.push(PropValueError::PropValueUnexpectedOption {
+                        option_name: opt_name.to_owned(),
+                        option_value: opt_value.to_owned(),
+                    });
+                    continue;
+                }
+            }
+        }
+
+        if errors.is_empty() {
+            Ok(value)
+        } else {
+            Err(errors)
+        }
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]
-pub struct PropsetdefPropValue {
-    pub write: WriteSide,
+pub struct PropsetdefMetadataEntry {
+    pub props: BTreeMap<String, PropValue>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, schemars::JsonSchema)]

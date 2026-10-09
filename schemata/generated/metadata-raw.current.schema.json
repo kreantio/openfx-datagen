@@ -18,7 +18,7 @@
     "propsetdef_map": {
       "type": "object",
       "additionalProperties": {
-        "$ref": "#/$defs/Todo"
+        "$ref": "#/$defs/PropsetdefMetadataEntry"
       }
     },
     "actiondef_map": {
@@ -207,7 +207,7 @@
         "props": {
           "type": "object",
           "additionalProperties": {
-            "$ref": "#/$defs/PropsetPropValue"
+            "$ref": "#/$defs/PropValue"
           }
         },
         "props_refs": {
@@ -229,7 +229,7 @@
         "Plugin"
       ]
     },
-    "PropsetPropValue": {
+    "PropValue": {
       "type": "object",
       "properties": {
         "host_optional": {
@@ -246,6 +246,20 @@
           ]
         }
       }
+    },
+    "PropsetdefMetadataEntry": {
+      "type": "object",
+      "properties": {
+        "props": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/PropValue"
+          }
+        }
+      },
+      "required": [
+        "props"
+      ]
     },
     "Todo": {
       "oneOf": [

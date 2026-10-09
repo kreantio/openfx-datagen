@@ -55,15 +55,20 @@ pub fn extract_metadata(
             }
             MetadataSection::Propsetdef(name, lines) => {
                 if let Some(cname) = cname {
-                    error.propsetdef_entries_on_items.insert(cname.to_string());
+                    error.propsetdef_errors.push((
+                        name.to_string(),
+                        PropsetdefError::PropsetdefOnItem {
+                            item_cname: cname.to_owned(),
+                        },
+                    ));
                     continue;
                 }
-                metadata.propsetdef_map.insert(
-                    name.to_string(),
-                    Todo::TODO {
-                        content: lines.collect::<Vec<_>>().join("\n"),
-                    },
-                );
+
+                if let Some(entry) =
+                    parse_propsetdef(name, lines.peekable(), &mut error, &stringname_to_cname)
+                {
+                    metadata.propsetdef_map.insert(name.to_string(), entry);
+                }
             }
             MetadataSection::Actiondef(lines) => {
                 let Some(cname) = cname else {
@@ -357,7 +362,7 @@ fn parse_propset(
     }
 
     let mut write: Option<WriteSide> = None;
-    let mut props: BTreeMap<String, PropsetPropValue> = BTreeMap::new();
+    let mut props: BTreeMap<String, PropValue> = BTreeMap::new();
     let mut props_refs: BTreeSet<String> = BTreeSet::new();
 
     while let Some(line) = lines.next() {
@@ -405,46 +410,18 @@ fn parse_propset(
                     });
                 };
 
-                let mut value = PropsetPropValue::default();
-
-                for (opt_name, opt_value) in opts {
-                    match opt_name {
-                        "host_optional" => {
-                            if value.host_optional {
-                                err_continue!(PropsetError::PropsetPropDuplicateOption {
-                                    prop_cname: prop_cname.to_owned(),
-                                    option_name: "host_optional".to_owned(),
-                                });
-                            }
-                            value.host_optional = true;
-                        }
-                        "write" => {
-                            if value.write.is_some() {
-                                err_continue!(PropsetError::PropsetPropDuplicateOption {
-                                    prop_cname: prop_cname.to_owned(),
-                                    option_name: "write".to_owned(),
-                                });
-                            }
-                            value.write = match WriteSide::try_from(opt_value) {
-                                Some(write_side) => Some(write_side),
-                                None => {
-                                    err_continue!(PropsetError::PropsetPropUnexpectedOptionValue {
-                                        prop_cname: prop_cname.to_owned(),
-                                        option_name: "write".to_owned(),
-                                        option_value: opt_value.to_owned(),
-                                    });
-                                }
-                            }
-                        }
-                        _ => {
-                            err_continue!(PropsetError::PropsetPropUnexpectedOption {
+                let value = match PropValue::try_from_options(opts) {
+                    Ok(value) => value,
+                    Err(errors) => {
+                        for error in errors {
+                            err_continue!(PropsetError::PropsetPropValueError {
                                 prop_cname: prop_cname.to_owned(),
-                                option_name: opt_name.to_owned(),
-                                option_value: opt_value.to_owned(),
+                                error,
                             });
                         }
+                        continue;
                     }
-                }
+                };
 
                 match props.entry(prop_cname.to_owned()) {
                     std::collections::btree_map::Entry::Vacant(entry) => {
@@ -481,6 +458,69 @@ fn parse_propset(
         props,
         props_refs,
     })
+}
+
+fn parse_propsetdef(
+    name: &str,
+    lines: Peekable<std::str::Lines>,
+    error: &mut Error,
+    stringname_to_cname: &HashMap<&str, &str>,
+) -> Option<PropsetdefMetadataEntry> {
+    macro_rules! err_continue {
+        ($err:expr) => {
+            error.propsetdef_errors.push((name.to_owned(), $err));
+            continue;
+        };
+    }
+
+    let mut props: BTreeMap<String, PropValue> = BTreeMap::new();
+
+    for line in lines {
+        let line = line.trim();
+
+        if line.is_empty() {
+            continue;
+        } else if let Some(item) = line.trim_start().strip_prefix("- ") {
+            let item = item.trim();
+            let (stringname, opts) = parse_prop_item(item);
+
+            let Some(&prop_cname) = stringname_to_cname.get(stringname) else {
+                err_continue!(PropsetdefError::PropsetdefUndefinedProp {
+                    stringname: stringname.to_owned(),
+                });
+            };
+
+            let value = match PropValue::try_from_options(opts) {
+                Ok(value) => value,
+                Err(errors) => {
+                    for error in errors {
+                        err_continue!(PropsetdefError::PropsetdefPropValueError {
+                            prop_cname: prop_cname.to_owned(),
+                            error,
+                        });
+                    }
+                    continue;
+                }
+            };
+
+            match props.entry(prop_cname.to_owned()) {
+                std::collections::btree_map::Entry::Vacant(entry) => {
+                    entry.insert(value);
+                }
+                std::collections::btree_map::Entry::Occupied(_) => {
+                    err_continue!(PropsetdefError::PropsetdefPropDuplicate {
+                        prop_cname: prop_cname.to_owned(),
+                    });
+                }
+            }
+        } else {
+            tracing::warn!(
+                "parse_propsetdef: {name}: unrecognized line that will be ignored: {line}"
+            );
+        }
+    }
+
+    Some(PropsetdefMetadataEntry { props })
 }
 
 fn extract_stringname_to_cname(
