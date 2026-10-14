@@ -37,8 +37,9 @@ pub mod real_c_headers {
         ($tester_name:path, $fn_name: ident, $static_name:ident) => {
             #[test]
             #[allow(non_snake_case)]
-            fn $fn_name() {
-                $tester_name(crate::test_fixtures::real_c_headers::$static_name);
+            fn $fn_name() -> Result<(), Box<dyn std::error::Error>> {
+                $tester_name(crate::test_fixtures::real_c_headers::$static_name)?;
+                Ok(())
             }
         };
     }

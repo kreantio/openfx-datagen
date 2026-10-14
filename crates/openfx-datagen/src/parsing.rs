@@ -320,10 +320,9 @@ pub fn parse(code: &str) -> Result<BindingsUnprocessed, Error> {
 mod tests {
     use super::*;
 
-    fn test_real_file(content: &str) {
-        if let Err(err) = parse(content) {
-            panic!("{:?}", err)
-        }
+    fn test_real_file(content: &str) -> Result<(), Box<dyn std::error::Error>> {
+        parse(content)?;
+        Ok(())
     }
 
     crate::test_fixtures::real_c_headers::make_test_real_files!(
