@@ -96,10 +96,10 @@ fn gen_data(cmd: CommandGenData) -> Result<(), Box<dyn std::error::Error + Send 
         serde_json::to_writer_pretty(file, &metadata)?;
     }
 
-    let processed_bindings = process(parsed_headers)?;
-
     if let Some(output_bindings_path) = cmd.output_bindings_data {
         std::fs::create_dir_all(&output_bindings_path)?;
+
+        let processed_bindings = process(parsed_headers)?;
 
         processed_bindings.par_iter().try_for_each(
             |(name, bindings)| -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

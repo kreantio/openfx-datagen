@@ -615,7 +615,7 @@ fn extract_stringname_to_cname(
 
     for (file_name, bindings) in input {
         if file_name.starts_with("ofx-") {
-            // Skip the default colospace header.
+            // Skip the default colorspace header.
             continue;
         }
 
@@ -815,12 +815,14 @@ fn parse_prop_item(prop_item: &str) -> (&str, HashMap<&str, &str>) {
 
     let mut opts: HashMap<&str, &str> = HashMap::new();
 
-    if rest.matches("=").count() > 1 {
-        todo!("parse_prop_item: Support multiple options.")
+    for opt_str in rest.split(",") {
+        let opt_str = opt_str.trim();
+        if opt_str.is_empty() {
+            continue;
     }
-
-    let (key, value) = rest.split_once("=").unwrap_or((rest, ""));
+        let (key, value) = opt_str.split_once("=").unwrap_or((opt_str, ""));
     opts.insert(key.trim(), value.trim());
+    }
 
     (stringname, opts)
 }

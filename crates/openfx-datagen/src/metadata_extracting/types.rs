@@ -158,6 +158,13 @@ impl PropValue {
                         });
                         continue;
                     }
+                    if opt_value != "true" {
+                        errors.push(PropValueError::PropValueUnexpectedOptionValue {
+                            option_name: "host_optional".to_owned(),
+                            option_value: opt_value.to_owned(),
+                        });
+                        continue;
+                    }
                     value.host_optional = true;
                 }
                 "write" => {
