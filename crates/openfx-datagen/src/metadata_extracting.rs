@@ -228,9 +228,8 @@ fn parse_propdef(
             }
         } else if let Some(value) = line.strip_prefix("dimension: ") {
             if dimension.is_some() {
-                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                err_continue!(PropdefError::PropdefDuplicateField {
                     field_name: "dimension".to_owned(),
-                    value: value.to_owned(),
                 });
             }
 
@@ -247,9 +246,8 @@ fn parse_propdef(
             }
         } else if let Some(value) = line.strip_prefix("introduced: ") {
             if introduced.is_some() {
-                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                err_continue!(PropdefError::PropdefDuplicateField {
                     field_name: "introduced".to_owned(),
-                    value: value.to_owned(),
                 });
             }
 
@@ -260,9 +258,8 @@ fn parse_propdef(
                 "parse_propdef: {cname}:found `added: `, will treat it as `introduced: `."
             );
             if introduced.is_some() {
-                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                err_continue!(PropdefError::PropdefDuplicateField {
                     field_name: "introduced".to_owned(),
-                    value: value.to_owned(),
                 });
             }
 
@@ -270,9 +267,8 @@ fn parse_propdef(
             introduced = Some(value.to_owned());
         } else if let Some(value) = line.strip_prefix("deprecated: ") {
             if deprecated.is_some() {
-                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                err_continue!(PropdefError::PropdefDuplicateField {
                     field_name: "deprecated".to_owned(),
-                    value: value.to_owned(),
                 });
             }
 
@@ -280,17 +276,15 @@ fn parse_propdef(
             deprecated = Some(value.to_owned());
         } else if line == "hostOptional: true" {
             if host_optional {
-                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                err_continue!(PropdefError::PropdefDuplicateField {
                     field_name: "hostOptional".to_owned(),
-                    value: "true".to_owned(),
                 });
             }
             host_optional = true;
         } else if line == "optional: true" {
             if optional {
-                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                err_continue!(PropdefError::PropdefDuplicateField {
                     field_name: "optional".to_owned(),
-                    value: "true".to_owned(),
                 });
             }
             optional = true;
@@ -298,9 +292,8 @@ fn parse_propdef(
             tracing::warn!("parse_propdef: {cname}: found redundant `cname`: {value}");
 
             if prop_cname.is_some() {
-                err_continue!(PropdefError::PropdefUnexpectedFieldValue {
+                err_continue!(PropdefError::PropdefDuplicateField {
                     field_name: "cname".to_owned(),
-                    value: value.to_owned(),
                 });
             }
 
@@ -819,9 +812,9 @@ fn parse_prop_item(prop_item: &str) -> (&str, HashMap<&str, &str>) {
         let opt_str = opt_str.trim();
         if opt_str.is_empty() {
             continue;
-    }
+        }
         let (key, value) = opt_str.split_once("=").unwrap_or((opt_str, ""));
-    opts.insert(key.trim(), value.trim());
+        opts.insert(key.trim(), value.trim());
     }
 
     (stringname, opts)
