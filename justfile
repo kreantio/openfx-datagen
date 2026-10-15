@@ -7,6 +7,14 @@ generate-schemata:
     mkdir -p {{ output-schemata-path }}
     cargo run --package openfx-datagen --bin cli -- gen-schemata --output-schemata "{{ output-schemata-path }}"
 
+dry-run-generate-schemata:
+    cargo run --package openfx-datagen --bin cli -- gen-schemata --dry-run
+
+dry-run-generate-data:
+    cargo run --package openfx-datagen --bin cli -- gen-data \
+        --dry-run=bindings-data,metadata \
+        --input-c-headers ./test-fixtures/openfx/include
+
 detect-stale-generated-schemata: generate-schemata
     #!/usr/bin/env sh
     if ! git diff --quiet; then
@@ -33,7 +41,7 @@ compare-generated-bindings-against-reference-bindings:
 
     cargo run --package openfx-datagen --bin cli -- gen-data \
         --input-c-headers ./test-fixtures/openfx/include \
-        --output-data ./test-fixtures/tmp/data
+        --output-bindings-data ./test-fixtures/tmp/data/bindings
 
     cargo run --package openfx-bindgen --bin cli -- \
         --input-data ./test-fixtures/tmp/data/bindings \

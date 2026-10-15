@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
-use crate::parsing::{BindingsUnprocessed, RootItemWithCommentAbove};
+use crate::{
+    parsing::{BindingsUnprocessed, RootItemWithCommentAbove},
+    utils::write_schema_json_pretty,
+};
 
 #[derive(Debug, snafu::Snafu)]
 pub enum Error {
@@ -55,17 +58,7 @@ impl Bindings {
     pub fn write_schema_json_pretty<W: std::io::Write>(
         writer: W,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let schema_generator = schemars::generate::SchemaSettings::default()
-            .with_transform(schemars::transform::RecursiveTransform(
-                |s: &mut schemars::Schema| {
-                    s.remove("description");
-                },
-            ))
-            .into_generator();
-
-        let bindings_schema = schema_generator.into_root_schema_for::<Bindings>();
-        serde_json::to_writer_pretty(writer, &bindings_schema)?;
-        Ok(())
+        write_schema_json_pretty::<_, Self>(writer)
     }
 }
 

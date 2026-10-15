@@ -8,7 +8,7 @@ use openfx_datagen::{
 pub struct InputData {
     pub bindings: HashMap<String, Bindings>,
 
-    pub name_to_file_name: HashMap<String, String>,
+    pub cname_to_file_name: HashMap<String, String>,
 }
 
 pub fn load_input_data(
@@ -16,7 +16,7 @@ pub fn load_input_data(
 ) -> Result<InputData, Box<dyn std::error::Error>> {
     let mut bindings = HashMap::new();
 
-    let mut name_to_file_name = HashMap::new();
+    let mut cname_to_file_name = HashMap::new();
 
     for entry in std::fs::read_dir(input_data_folder)? {
         let entry = entry?;
@@ -26,7 +26,7 @@ pub fn load_input_data(
         {
             continue;
         }
-        let name = path
+        let file_name = path
             .file_name()
             .and_then(|s| s.to_str())
             .and_then(|s| s.strip_suffix(".json"))
@@ -41,36 +41,38 @@ pub fn load_input_data(
             let RootItemWithCommentAbove::Item { item, .. } = item else {
                 continue;
             };
-            name_to_file_name.insert(item.name().to_owned(), name.clone());
+
+            cname_to_file_name.insert(item.name().to_owned(), file_name.clone());
+
             if let RootItem::TypedefOpaquePointer {
                 pointee_struct_name,
                 ..
             } = item
             {
-                name_to_file_name.insert(pointee_struct_name.to_owned(), name.clone());
+                cname_to_file_name.insert(pointee_struct_name.to_owned(), file_name.clone());
             }
         }
 
-        bindings.insert(name, single_bindings);
+        bindings.insert(file_name, single_bindings);
     }
 
     Ok(InputData {
         bindings,
-        name_to_file_name,
+        cname_to_file_name,
     })
 }
 
 impl InputData {
-    pub fn find_item_origin_file_name(&self, name: &str) -> Option<&str> {
-        self.name_to_file_name.get(name).map(|x| x.as_str())
+    pub fn find_item_origin_file_name(&self, cname: &str) -> Option<&str> {
+        self.cname_to_file_name.get(cname).map(|x| x.as_str())
     }
 
-    pub fn find_item(&self, name: &str) -> Option<&RootItem> {
-        let file_name = self.find_item_origin_file_name(name)?;
+    pub fn find_item(&self, cname: &str) -> Option<&RootItem> {
+        let file_name = self.find_item_origin_file_name(cname)?;
 
         self.bindings.get(file_name)?.items.iter().find_map(|item| {
             if let RootItemWithCommentAbove::Item { item, .. } = item
-                && item.name() == name
+                && item.name() == cname
             {
                 Some(item)
             } else {
@@ -79,8 +81,8 @@ impl InputData {
         })
     }
 
-    pub fn find_define_value(&self, name: &str) -> Option<&DefineValue> {
-        self.find_item(name).and_then(|item| {
+    pub fn find_define_value(&self, cname: &str) -> Option<&DefineValue> {
+        self.find_item(cname).and_then(|item| {
             if let RootItem::Define { value, .. } = item {
                 Some(value)
             } else {

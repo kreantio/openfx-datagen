@@ -41,7 +41,7 @@ jobs:
   # ---------------------------------------------------------------------------
 
   tests:
-    name: Run tests
+    name: Run tests and dry runs
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -63,6 +63,14 @@ jobs:
       - name: Run doc-tests
         if: always()
         run: cargo test --all-features --doc --no-fail-fast
+
+      - uses: extractions/setup-just@v4
+
+      - name: "Run dry run: generate-schemata"
+        run: just dry-run-generate-schemata
+
+      - name: "Run dry run: generate-data"
+        run: just dry-run-generate-data
 
   # ---------------------------------------------------------------------------
 

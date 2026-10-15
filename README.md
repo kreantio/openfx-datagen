@@ -6,6 +6,7 @@ See Also:
 
 - [AI_POLICY.md](./AI_POLICY.md)
 - [ATTRIBUTION.md](./ATTRIBUTION.md)
+- [CONTRIBUTING.md](./CONTRIBUTING.md)
 
 `openfx-datagen` is a tool for generating data from the official OpenFX C
 headers[^1].
