@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    num::NonZero,
+};
 
 use crate::{
     metadata_extracting::{
@@ -446,7 +449,7 @@ impl PropdefType {
 )]
 #[serde(tag = "$type")]
 pub enum PropdefDimension {
-    Fixed { size: usize },
+    Fixed { size: NonZero<usize> },
     Dynamic,
 }
 
@@ -455,9 +458,9 @@ impl PropdefDimension {
         if dimension == "N" {
             Some(Self::Dynamic)
         } else {
-            match dimension.parse().ok()? {
-                0 => Some(Self::Dynamic),
-                size => Some(Self::Fixed { size }),
+            match NonZero::new(dimension.parse().ok()?) {
+                None => Some(Self::Dynamic),
+                Some(size) => Some(Self::Fixed { size }),
             }
         }
     }
