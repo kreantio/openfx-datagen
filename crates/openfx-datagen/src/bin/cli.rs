@@ -77,7 +77,7 @@ fn gen_data(cmd: CommandGenData) -> Result<(), Box<dyn std::error::Error + Send 
     }
 
     let parsed_headers = {
-        tracing::info!("Generating bindings data…");
+        tracing::info!("Parsing input C headers…");
 
         let mut input_entries: Vec<(std::fs::DirEntry, String)> = vec![];
         for entry in std::fs::read_dir(&cmd.input_c_headers)? {
@@ -116,21 +116,32 @@ fn gen_data(cmd: CommandGenData) -> Result<(), Box<dyn std::error::Error + Send 
     let metadata = if cmd.output_metadata.is_some()
         || cmd.dry_run.contains(&CommandGenDataDryRunValue::Metadata)
     {
-        tracing::info!("Generating metadata…");
+        tracing::info!("Generating metadata from parsed headers…");
         Some(extract_metadata(&parsed_headers)?)
     } else {
         None
     };
 
-    if let Some(output_bindings_path) = cmd.output_bindings_data {
+    let processed_bindings = if cmd.output_bindings_data.is_some()
+        || cmd
+            .dry_run
+            .contains(&CommandGenDataDryRunValue::BindingsData)
+    {
+        tracing::info!("Generating bindings data from parsed headers…");
+        Some(process(parsed_headers)?)
+    } else {
+        None
+    };
+
+    if let Some(processed_bindings) = processed_bindings
+        && let Some(output_bindings_path) = cmd.output_bindings_data
+    {
         tracing::info!(
             "Writing the generated bindings data to: {:?}",
             output_bindings_path
         );
 
         std::fs::create_dir_all(&output_bindings_path)?;
-
-        let processed_bindings = process(parsed_headers)?;
 
         processed_bindings.par_iter().try_for_each(
             |(name, bindings)| -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

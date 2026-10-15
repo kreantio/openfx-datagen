@@ -455,9 +455,10 @@ impl PropdefDimension {
         if dimension == "N" {
             Some(Self::Dynamic)
         } else {
-            let size = dimension.parse().ok()?;
-            assert!(size > 0);
-            Some(Self::Fixed { size })
+            match dimension.parse().ok()? {
+                0 => Some(Self::Dynamic),
+                size => Some(Self::Fixed { size }),
+            }
         }
     }
 }
