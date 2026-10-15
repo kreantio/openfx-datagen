@@ -7,6 +7,14 @@ generate-schemata:
     mkdir -p {{ output-schemata-path }}
     cargo run --package openfx-datagen --bin cli -- gen-schemata --output-schemata "{{ output-schemata-path }}"
 
+dry-run-generate-schemata:
+    cargo run --package openfx-datagen --bin cli -- gen-schemata --dry-run
+
+dry-run-generate-data:
+    cargo run --package openfx-datagen --bin cli -- gen-data \
+        --dry-run=bindings-data,metadata \
+        --input-c-headers ./test-fixtures/openfx/include
+
 detect-stale-generated-schemata: generate-schemata
     #!/usr/bin/env sh
     if ! git diff --quiet; then

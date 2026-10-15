@@ -23,6 +23,9 @@ enum Commands {
 
 #[derive(Debug, Parser)]
 struct CommandGenData {
+    #[clap(long, value_delimiter = ',', num_args(1..))]
+    dry_run: Vec<CommandGenDataDryRunValue>,
+
     /// the path to the input C headers directory
     #[arg(long)]
     input_c_headers: PathBuf,
@@ -36,11 +39,20 @@ struct CommandGenData {
     output_metadata: Option<PathBuf>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, clap::ValueEnum)]
+enum CommandGenDataDryRunValue {
+    BindingsData,
+    Metadata,
+}
+
 #[derive(Debug, Parser)]
 struct CommandGenSchemata {
+    #[clap(long)]
+    dry_run: bool,
+
     /// the path to the output directory for generated schemata
-    #[arg(long)]
-    output_schemata: PathBuf,
+    #[arg(long, required_unless_present = "dry_run")]
+    output_schemata: Option<PathBuf>,
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -55,26 +67,37 @@ fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 }
 
 fn gen_data(cmd: CommandGenData) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let mut input_entries: Vec<(std::fs::DirEntry, String)> = vec![];
-    for entry in std::fs::read_dir(&cmd.input_c_headers)? {
-        let entry = entry?;
-        let path = entry.path();
-        if !entry.file_type()?.is_file() || path.extension().is_none_or(|ext| ext != "h") {
-            continue;
+    if cmd.dry_run.is_empty() {
+        tracing::info!("Generating data…");
+    } else {
+        tracing::info!("Generating data… This is a dry run.");
+        if cmd.output_bindings_data.is_some() || cmd.output_metadata.is_some() {
+            return Err("Output paths should not be specified for a dry run.".into());
         }
-        let name = path
-            .file_name()
-            .ok_or_else(|| format!("Failed to get file name for path: {:?}", path))?
-            .to_string_lossy()
-            .to_string();
-        if !name.starts_with("ofx") {
-            continue;
-        }
-        input_entries.push((entry, name));
     }
 
-    let parsed_headers: BTreeMap<_, _> =
-        input_entries
+    let parsed_headers = {
+        tracing::info!("Generating bindings data…");
+
+        let mut input_entries: Vec<(std::fs::DirEntry, String)> = vec![];
+        for entry in std::fs::read_dir(&cmd.input_c_headers)? {
+            let entry = entry?;
+            let path = entry.path();
+            if !entry.file_type()?.is_file() || path.extension().is_none_or(|ext| ext != "h") {
+                continue;
+            }
+            let name = path
+                .file_name()
+                .ok_or_else(|| format!("Failed to get file name for path: {:?}", path))?
+                .to_string_lossy()
+                .to_string();
+            if !name.starts_with("ofx") {
+                continue;
+            }
+            input_entries.push((entry, name));
+        }
+
+        let parsed_headers: BTreeMap<_, _> = input_entries
             .par_iter()
             .map(
                 |(entry, name)| -> Result<
@@ -87,16 +110,24 @@ fn gen_data(cmd: CommandGenData) -> Result<(), Box<dyn std::error::Error + Send 
             )
             .collect::<Result<BTreeMap<_, _>, _>>()?;
 
-    if let Some(output_metadata_path) = cmd.output_metadata {
-        std::fs::create_dir_all(&output_metadata_path)?;
+        parsed_headers
+    };
 
-        let metadata = extract_metadata(&parsed_headers)?;
-        let output_path = output_metadata_path.join("raw.json");
-        let file = std::fs::File::create(&output_path)?;
-        serde_json::to_writer_pretty(file, &metadata)?;
-    }
+    let metadata = if cmd.output_metadata.is_some()
+        || cmd.dry_run.contains(&CommandGenDataDryRunValue::Metadata)
+    {
+        tracing::info!("Generating metadata…");
+        Some(extract_metadata(&parsed_headers)?)
+    } else {
+        None
+    };
 
     if let Some(output_bindings_path) = cmd.output_bindings_data {
+        tracing::info!(
+            "Writing the generated bindings data to: {:?}",
+            output_bindings_path
+        );
+
         std::fs::create_dir_all(&output_bindings_path)?;
 
         let processed_bindings = process(parsed_headers)?;
@@ -112,21 +143,68 @@ fn gen_data(cmd: CommandGenData) -> Result<(), Box<dyn std::error::Error + Send 
         )?;
     }
 
+    if let Some(metadata) = metadata
+        && let Some(output_metadata_path) = cmd.output_metadata
+    {
+        tracing::info!(
+            "Writing the generated metadata to: {:?}",
+            output_metadata_path
+        );
+
+        std::fs::create_dir_all(&output_metadata_path)?;
+
+        let output_path = output_metadata_path.join("raw.json");
+        let file = std::fs::File::create(&output_path)?;
+        serde_json::to_writer_pretty(file, &metadata)?;
+    }
+
     Ok(())
 }
 
 fn gen_schemata(cmd: CommandGenSchemata) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    if cmd.dry_run {
+        tracing::info!("Generating schemata… This is a dry run.");
+        if cmd.output_schemata.is_some() {
+            return Err("Output paths should not be specified for a dry run.".into());
+        }
+    } else {
+        tracing::info!("Generating schemata…");
+    }
+
     let output_schemata_path = cmd.output_schemata;
-    std::fs::create_dir_all(&output_schemata_path)?;
+    if let Some(output_schemata_path) = &output_schemata_path {
+        std::fs::create_dir_all(output_schemata_path)?;
+    }
 
-    let output_bindings_schema_path = output_schemata_path.join("bindings.current.schema.json");
-    let file = std::fs::File::create(&output_bindings_schema_path)?;
-    Bindings::write_schema_json_pretty(file)?;
+    {
+        let (writer, writer_desc): (Box<dyn std::io::Write>, String) = match &output_schemata_path {
+            Some(path) => {
+                let file_path = path.join("bindings.current.schema.json");
+                (
+                    Box::new(std::fs::File::create(&file_path)?),
+                    format!("a file at {:?}", file_path),
+                )
+            }
+            None => (Box::new(std::io::sink()), "a sink".to_string()),
+        };
+        tracing::info!("Writing the current bindings schema to: {writer_desc}");
+        Bindings::write_schema_json_pretty(writer)?;
+    }
 
-    let output_metadata_raw_schema_path =
-        output_schemata_path.join("metadata-raw.current.schema.json");
-    let file = std::fs::File::create(&output_metadata_raw_schema_path)?;
-    Metadata::write_schema_json_pretty(file)?;
+    {
+        let (writer, writer_desc): (Box<dyn std::io::Write>, String) = match &output_schemata_path {
+            Some(path) => {
+                let file_path = path.join("metadata-raw.current.schema.json");
+                (
+                    Box::new(std::fs::File::create(&file_path)?),
+                    format!("a file at {:?}", file_path),
+                )
+            }
+            None => (Box::new(std::io::sink()), "a sink".to_string()),
+        };
+        tracing::info!("Writing the current metadata schema to: {writer_desc}");
+        Metadata::write_schema_json_pretty(writer)?;
+    }
 
     Ok(())
 }
