@@ -42,12 +42,6 @@ pub enum PropdefError {
     PropdefWithName {
         name: String,
     },
-    /// `type: ` and `dimension: ` fields are required, but at least one of them
-    /// is missing.
-    PropdefIncomplete {
-        missing_type: bool,
-        missing_dimension: bool,
-    },
     PropdefUnexpectedFieldValue {
         field_name: String,
         value: String,
@@ -59,9 +53,6 @@ pub enum PropdefError {
     PropdefEnumAmongOtherTypes,
     PropdefEnumWithoutValuesField,
     PropdefNonEnumWithValuesField,
-    PropdefUnsupportedValueLineInValues {
-        line_content: String,
-    },
 }
 
 #[derive(Debug, snafu::Snafu)]
@@ -72,17 +63,6 @@ pub enum PropsetError {
     },
     PropsetOnItem {
         item_cname: String,
-    },
-    /// `write: ` field is required, but is missing.
-    PropsetIncomplete {
-        missing_write: bool,
-    },
-    PropsetUnexpectedFieldValue {
-        field_name: String,
-        value: String,
-    },
-    PropsetDuplicateField {
-        field_name: String,
     },
     PropsetUndefinedProp {
         stringname: String,

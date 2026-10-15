@@ -281,20 +281,35 @@ impl ActiondefMetadataEntry {
         let mut in_args: BTreeSet<String> = BTreeSet::new();
         let mut out_args: BTreeSet<String> = BTreeSet::new();
 
-        for (args, raw_args) in [(&mut in_args, raw.in_args), (&mut out_args, raw.out_args)] {
+        for (is_in, args, raw_args) in [
+            (true, &mut in_args, raw.in_args),
+            (false, &mut out_args, raw.out_args),
+        ] {
             for raw_arg in raw_args {
                 let (stringname, opts) = parse_prop_item(&raw_arg);
 
                 let Some(&prop_cname) = ctx.stringname_to_cname.get(stringname) else {
-                    err_continue!(ActiondefError::ActiondefUndefinedInArg {
-                        stringname: stringname.to_owned(),
-                    });
+                    if is_in {
+                        err_continue!(ActiondefError::ActiondefUndefinedInArg {
+                            stringname: stringname.to_owned(),
+                        });
+                    } else {
+                        err_continue!(ActiondefError::ActiondefUndefinedOutArg {
+                            stringname: stringname.to_owned(),
+                        });
+                    }
                 };
 
                 if !opts.is_empty() {
-                    err_continue!(ActiondefError::ActiondefInArgWithOptions {
-                        in_arg_cname: prop_cname.to_owned(),
-                    });
+                    if is_in {
+                        err_continue!(ActiondefError::ActiondefInArgWithOptions {
+                            in_arg_cname: prop_cname.to_owned(),
+                        });
+                    } else {
+                        err_continue!(ActiondefError::ActiondefOutArgWithOptions {
+                            out_arg_cname: prop_cname.to_owned(),
+                        });
+                    }
                 }
 
                 args.insert(prop_cname.to_owned());
