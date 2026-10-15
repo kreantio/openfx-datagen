@@ -1,6 +1,6 @@
 #![allow(non_snake_case)]
 
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, num::NonZero};
 
 use super::*;
 
@@ -126,7 +126,9 @@ fn test_propdef_kOfxImagePropBounds() -> Result<(), Box<Error>> {
         r#type: PropdefType::Simple {
             one_of: BTreeSet::from([PropdefTypeSimple::Int]),
         },
-        dimension: PropdefDimension::Fixed { size: 4 },
+        dimension: PropdefDimension::Fixed {
+            size: NonZero::new(4).unwrap(),
+        },
         introduced: Default::default(),
         deprecated: Default::default(),
         host_optional: Default::default(),
@@ -154,7 +156,9 @@ fn test_propdef_kOfxImageEffectPropProjectPixelAspectRatio() -> Result<(), Box<E
         r#type: PropdefType::Simple {
             one_of: BTreeSet::from([PropdefTypeSimple::Double]),
         },
-        dimension: PropdefDimension::Fixed { size: 1 },
+        dimension: PropdefDimension::Fixed {
+            size: NonZero::new(1).unwrap(),
+        },
         introduced: Default::default(),
         deprecated: Default::default(),
         host_optional: Default::default(),
@@ -182,7 +186,9 @@ fn test_propdef_kOfxParamPropEnabled() -> Result<(), Box<Error>> {
         r#type: PropdefType::Simple {
             one_of: BTreeSet::from([PropdefTypeSimple::Bool]),
         },
-        dimension: PropdefDimension::Fixed { size: 1 },
+        dimension: PropdefDimension::Fixed {
+            size: NonZero::new(1).unwrap(),
+        },
         introduced: Default::default(),
         deprecated: Default::default(),
         host_optional: Default::default(),
@@ -210,7 +216,9 @@ fn test_propdef_kOfxParamPropChoiceEnum() -> Result<(), Box<Error>> {
         r#type: PropdefType::Simple {
             one_of: BTreeSet::from([PropdefTypeSimple::Bool]),
         },
-        dimension: PropdefDimension::Fixed { size: 1 },
+        dimension: PropdefDimension::Fixed {
+            size: NonZero::new(1).unwrap(),
+        },
         introduced: Some(r#"1.5"#.to_owned()),
         deprecated: Default::default(),
         host_optional: Default::default(),
@@ -238,7 +246,9 @@ fn test_propdef_kOfxParamPropPluginMayWrite() -> Result<(), Box<Error>> {
         r#type: PropdefType::Simple {
             one_of: BTreeSet::from([PropdefTypeSimple::Bool]),
         },
-        dimension: PropdefDimension::Fixed { size: 1 },
+        dimension: PropdefDimension::Fixed {
+            size: NonZero::new(1).unwrap(),
+        },
         introduced: Default::default(),
         deprecated: Some(r#"1.4"#.to_owned()),
         host_optional: Default::default(),
@@ -293,7 +303,9 @@ fn test_propdef_kOfxPropInstanceData() -> Result<(), Box<Error>> {
         r#type: PropdefType::Simple {
             one_of: BTreeSet::from([PropdefTypeSimple::Pointer]),
         },
-        dimension: PropdefDimension::Fixed { size: 1 },
+        dimension: PropdefDimension::Fixed {
+            size: NonZero::new(1).unwrap(),
+        },
         introduced: Default::default(),
         deprecated: Default::default(),
         host_optional: Default::default(),
@@ -396,7 +408,9 @@ fn test_propdef_kOfxImageEffectPropColourManagementStyle() -> Result<(), Box<Err
                 },
             ],
         },
-        dimension: PropdefDimension::Fixed { size: 1 },
+        dimension: PropdefDimension::Fixed {
+            size: NonZero::new(1).unwrap(),
+        },
         introduced: Some(r#"1.5"#.to_owned()),
         deprecated: Default::default(),
         host_optional: Default::default(),
@@ -437,7 +451,9 @@ fn test_propdef_kOfxImageEffectPropOpenGLRenderSupported() -> Result<(), Box<Err
                 },
             ],
         },
-        dimension: PropdefDimension::Fixed { size: 1 },
+        dimension: PropdefDimension::Fixed {
+            size: NonZero::new(1).unwrap(),
+        },
         introduced: Default::default(),
         deprecated: Default::default(),
         host_optional: Default::default(),
