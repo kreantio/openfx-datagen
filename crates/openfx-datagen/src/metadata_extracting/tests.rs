@@ -1,24 +1,126 @@
 #![allow(non_snake_case)]
 
+use std::collections::BTreeSet;
+
 use super::*;
 
-fn lines(input: &str) -> Peekable<SignificantLines<'_>> {
-    SignificantLines::new(input.lines()).peekable()
+fn parse_propdef(
+    cname: &str,
+    content: &str,
+    stringname_to_cname: HashMap<&str, &str>,
+) -> Result<PropdefMetadataEntry, Box<Error>> {
+    let mut ctx = FactoryContext {
+        stringname_to_cname,
+        error: Default::default(),
+    };
+
+    let raw = match serde_saphyr::from_str::<RawPropdefMetadataEntry>(content) {
+        Ok(raw) => raw,
+        Err(err) => {
+            ctx.error.propdef_errors.push((
+                cname.to_owned(),
+                PropdefError::PropdefSerdeSaphyrParse { error: err },
+            ));
+            return Err(Box::new(ctx.error));
+        }
+    };
+
+    match PropdefMetadataEntry::try_from_raw(&mut ctx, cname, raw) {
+        Some(entry) => Ok(entry),
+        None => Err(Box::new(ctx.error)),
+    }
+}
+
+fn parse_propset(
+    name: &str,
+    content: &str,
+    stringname_to_cname: HashMap<&str, &str>,
+) -> Result<PropsetMetadataEntry, Box<Error>> {
+    let mut ctx = FactoryContext {
+        stringname_to_cname,
+        error: Default::default(),
+    };
+
+    let raw = match serde_saphyr::from_str::<RawPropsetMetadataEntry>(content) {
+        Ok(raw) => raw,
+        Err(err) => {
+            ctx.error.propset_errors.push((
+                name.to_owned(),
+                PropsetError::PropsetSerdeSaphyrParse { error: err },
+            ));
+            return Err(Box::new(ctx.error));
+        }
+    };
+
+    match PropsetMetadataEntry::try_from_raw(&mut ctx, name, raw) {
+        Some(entry) => Ok(entry),
+        None => Err(Box::new(ctx.error)),
+    }
+}
+
+fn parse_propsetdef(
+    name: &str,
+    content: &str,
+    stringname_to_cname: HashMap<&str, &str>,
+) -> Result<PropsetdefMetadataEntry, Box<Error>> {
+    let mut ctx = FactoryContext {
+        stringname_to_cname,
+        error: Default::default(),
+    };
+
+    let raw = match serde_saphyr::from_str::<RawPropsetdefMetadataEntry>(content) {
+        Ok(raw) => raw,
+        Err(err) => {
+            ctx.error.propsetdef_errors.push((
+                name.to_owned(),
+                PropsetdefError::PropsetdefSerdeSaphyrParse { error: err },
+            ));
+            return Err(Box::new(ctx.error));
+        }
+    };
+
+    match PropsetdefMetadataEntry::try_from_raw(&mut ctx, name, raw) {
+        Some(entry) => Ok(entry),
+        None => Err(Box::new(ctx.error)),
+    }
+}
+
+fn parse_actiondef(
+    cname: &str,
+    content: &str,
+    stringname_to_cname: HashMap<&str, &str>,
+) -> Result<ActiondefMetadataEntry, Box<Error>> {
+    let mut ctx = FactoryContext {
+        stringname_to_cname,
+        error: Default::default(),
+    };
+
+    let raw = match serde_saphyr::from_str::<RawActiondefMetadataEntry>(content) {
+        Ok(raw) => raw,
+        Err(err) => {
+            ctx.error.actiondef_errors.push((
+                cname.to_owned(),
+                ActiondefError::ActiondefSerdeSaphyrParse { error: err },
+            ));
+            return Err(Box::new(ctx.error));
+        }
+    };
+
+    match ActiondefMetadataEntry::try_from_raw(&mut ctx, cname, raw) {
+        Some(entry) => Ok(entry),
+        None => Err(Box::new(ctx.error)),
+    }
 }
 
 #[test]
-fn test_propdef_kOfxImagePropBounds() {
-    let mut error = Error::default();
-
+fn test_propdef_kOfxImagePropBounds() -> Result<(), Box<Error>> {
     let actual = parse_propdef(
         "kOfxImagePropBounds",
-        lines(
-            r#"type: int
+        r#"
+    type: int
     dimension: 4"#,
-        ),
-        &mut error,
-        &HashMap::from([]),
-    );
+        HashMap::from([]),
+    )?;
 
     let expected = PropdefMetadataEntry {
         r#type: PropdefType::Simple {
@@ -32,25 +134,21 @@ fn test_propdef_kOfxImagePropBounds() {
         cname: Default::default(),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propdef_kOfxImageEffectPropProjectPixelAspectRatio() {
-    let mut error = Error::default();
-
+fn test_propdef_kOfxImageEffectPropProjectPixelAspectRatio() -> Result<(), Box<Error>> {
     let actual = parse_propdef(
         "kOfxImageEffectPropProjectPixelAspectRatio",
-        lines(
-            r#"type: double
+        r#"
+    type: double
     dimension: 1
     cname: kOfxImageEffectPropProjectPixelAspectRatio"#,
-        ),
-        &mut error,
-        &HashMap::from([]),
-    );
+        HashMap::from([]),
+    )?;
 
     let expected = PropdefMetadataEntry {
         r#type: PropdefType::Simple {
@@ -64,25 +162,21 @@ fn test_propdef_kOfxImageEffectPropProjectPixelAspectRatio() {
         cname: Some(r#"kOfxImageEffectPropProjectPixelAspectRatio"#.to_owned()),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propdef_kOfxParamPropEnabled() {
-    let mut error = Error::default();
-
+fn test_propdef_kOfxParamPropEnabled() -> Result<(), Box<Error>> {
     let actual = parse_propdef(
         "kOfxParamPropEnabled",
-        lines(
-            r#"type: bool
+        r#"
+    type: bool
     dimension: 1
     optional: true"#,
-        ),
-        &mut error,
-        &HashMap::from([]),
-    );
+        HashMap::from([]),
+    )?;
 
     let expected = PropdefMetadataEntry {
         r#type: PropdefType::Simple {
@@ -96,57 +190,49 @@ fn test_propdef_kOfxParamPropEnabled() {
         cname: Default::default(),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propdef_kOfxParamPropChoiceEnum() {
-    let mut error = Error::default();
-
+fn test_propdef_kOfxParamPropChoiceEnum() -> Result<(), Box<Error>> {
     let actual = parse_propdef(
         "kOfxParamPropChoiceEnum",
-        lines(
-            r#"type: bool
+        r#"
+    type: bool
     dimension: 1
     added: "1.5""#,
-        ),
-        &mut error,
-        &HashMap::from([]),
-    );
+        HashMap::from([]),
+    )?;
 
     let expected = PropdefMetadataEntry {
         r#type: PropdefType::Simple {
             one_of: BTreeSet::from([PropdefTypeSimple::Bool]),
         },
         dimension: PropdefDimension::Fixed { size: 1 },
-        introduced: Some(r#""1.5""#.to_owned()),
+        introduced: Some(r#"1.5"#.to_owned()),
         deprecated: Default::default(),
         host_optional: Default::default(),
         optional: Default::default(),
         cname: Default::default(),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propdef_kOfxParamPropPluginMayWrite() {
-    let mut error = Error::default();
-
+fn test_propdef_kOfxParamPropPluginMayWrite() -> Result<(), Box<Error>> {
     let actual = parse_propdef(
         "kOfxParamPropPluginMayWrite",
-        lines(
-            r#"type: bool
+        r#"
+    type: bool
     dimension: 1
     deprecated: "1.4""#,
-        ),
-        &mut error,
-        &HashMap::from([]),
-    );
+        HashMap::from([]),
+    )?;
 
     let expected = PropdefMetadataEntry {
         r#type: PropdefType::Simple {
@@ -154,62 +240,54 @@ fn test_propdef_kOfxParamPropPluginMayWrite() {
         },
         dimension: PropdefDimension::Fixed { size: 1 },
         introduced: Default::default(),
-        deprecated: Some(r#""1.4""#.to_owned()),
+        deprecated: Some(r#"1.4"#.to_owned()),
         host_optional: Default::default(),
         optional: Default::default(),
         cname: Default::default(),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propdef_kOfxImageEffectPropColourManagementAvailableConfigs() {
-    let mut error = Error::default();
-
+fn test_propdef_kOfxImageEffectPropColourManagementAvailableConfigs() -> Result<(), Box<Error>> {
     let actual = parse_propdef(
         "kOfxImageEffectPropColourManagementAvailableConfigs",
-        lines(
-            r#"type: string
+        r#"
+   type: string
    dimension: N
    introduced: "1.5""#,
-        ),
-        &mut error,
-        &HashMap::from([]),
-    );
+        HashMap::from([]),
+    )?;
 
     let expected = PropdefMetadataEntry {
         r#type: PropdefType::Simple {
             one_of: BTreeSet::from([PropdefTypeSimple::String]),
         },
         dimension: PropdefDimension::Dynamic,
-        introduced: Some(r#""1.5""#.to_owned()),
+        introduced: Some(r#"1.5"#.to_owned()),
         deprecated: Default::default(),
         host_optional: Default::default(),
         optional: Default::default(),
         cname: Default::default(),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propdef_kOfxPropInstanceData() {
-    let mut error = Error::default();
-
+fn test_propdef_kOfxPropInstanceData() -> Result<(), Box<Error>> {
     let actual = parse_propdef(
         "kOfxPropInstanceData",
-        lines(
-            r#"type: pointer
+        r#"
+    type: pointer
     dimension: 1"#,
-        ),
-        &mut error,
-        &HashMap::from([]),
-    );
+        HashMap::from([]),
+    )?;
 
     let expected = PropdefMetadataEntry {
         r#type: PropdefType::Simple {
@@ -223,24 +301,20 @@ fn test_propdef_kOfxPropInstanceData() {
         cname: Default::default(),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propdef_kOfxParamPropDefault() {
-    let mut error = Error::default();
-
+fn test_propdef_kOfxParamPropDefault() -> Result<(), Box<Error>> {
     let actual = parse_propdef(
         "kOfxParamPropDefault",
-        lines(
-            r#"type: [int, double, string, pointer]
+        r#"
+   type: [int, double, string, pointer]
    dimension: N"#,
-        ),
-        &mut error,
-        &HashMap::from([]),
-    );
+        HashMap::from([]),
+    )?;
 
     let expected = PropdefMetadataEntry {
         r#type: PropdefType::Simple {
@@ -259,19 +333,17 @@ fn test_propdef_kOfxParamPropDefault() {
         cname: Default::default(),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propdef_kOfxImageEffectPropColourManagementStyle() {
-    let mut error = Error::default();
-
+fn test_propdef_kOfxImageEffectPropColourManagementStyle() -> Result<(), Box<Error>> {
     let actual = parse_propdef(
         "kOfxImageEffectPropColourManagementStyle",
-        lines(
-            r#"type: enum
+        r#"
+   type: enum
    dimension: 1
    values:
      - OfxImageEffectColourManagementNone
@@ -280,9 +352,7 @@ fn test_propdef_kOfxImageEffectPropColourManagementStyle() {
      - OfxImageEffectColourManagementFull
      - OfxImageEffectColourManagementOCIO
    introduced: "1.5""#,
-        ),
-        &mut error,
-        &HashMap::from([
+        HashMap::from([
             (
                 "OfxImageEffectColourManagementNone",
                 "kOfxImageEffectColourManagementNone",
@@ -304,7 +374,7 @@ fn test_propdef_kOfxImageEffectPropColourManagementStyle() {
                 "kOfxImageEffectColourManagementOCIO",
             ),
         ]),
-    );
+    )?;
 
     let expected = PropdefMetadataEntry {
         r#type: PropdefType::StringEnum {
@@ -327,35 +397,31 @@ fn test_propdef_kOfxImageEffectPropColourManagementStyle() {
             ],
         },
         dimension: PropdefDimension::Fixed { size: 1 },
-        introduced: Some(r#""1.5""#.to_owned()),
+        introduced: Some(r#"1.5"#.to_owned()),
         deprecated: Default::default(),
         host_optional: Default::default(),
         optional: Default::default(),
         cname: Default::default(),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propdef_kOfxImageEffectPropOpenGLRenderSupported() {
-    let mut error = Error::default();
-
+fn test_propdef_kOfxImageEffectPropOpenGLRenderSupported() -> Result<(), Box<Error>> {
     let actual = parse_propdef(
         "kOfxImageEffectPropOpenGLRenderSupported",
-        lines(
-            r#"type: enum
+        r#"
+    type: enum
     dimension: 1
     values:
       - "false"
       - "true"
       - needed"#,
-        ),
-        &mut error,
-        &HashMap::from([]),
-    );
+        HashMap::from([]),
+    )?;
 
     let expected = PropdefMetadataEntry {
         r#type: PropdefType::StringEnum {
@@ -379,29 +445,25 @@ fn test_propdef_kOfxImageEffectPropOpenGLRenderSupported() {
         cname: Default::default(),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propset_InteractDescriptor() {
-    let mut error = Error::default();
-
+fn test_propset_InteractDescriptor() -> Result<(), Box<Error>> {
     let actual = parse_propset(
         "InteractDescriptor",
-        lines(
-            r#"write: host
+        r#"
+    write: host
     props:
       - OfxInteractPropHasAlpha
       - OfxInteractPropBitDepth"#,
-        ),
-        &mut error,
-        &HashMap::from([
+        HashMap::from([
             ("OfxInteractPropBitDepth", "kOfxInteractPropBitDepth"),
             ("OfxInteractPropHasAlpha", "kOfxInteractPropHasAlpha"),
         ]),
-    );
+    )?;
 
     let expected = PropsetMetadataEntry {
         write: WriteSide::Host,
@@ -412,26 +474,22 @@ fn test_propset_InteractDescriptor() {
         props_refs: Default::default(),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propset_ParamsGroup() {
-    let mut error = Error::default();
-
+fn test_propset_ParamsGroup() -> Result<(), Box<Error>> {
     let actual = parse_propset(
         "ParamsGroup",
-        lines(
-            r#"write: plugin
+        r#"
+    write: plugin
     props:
       - OfxParamPropGroupOpen
       - ParamsCommon_REF"#,
-        ),
-        &mut error,
-        &HashMap::from([("OfxParamPropGroupOpen", "kOfxParamPropGroupOpen")]),
-    );
+        HashMap::from([("OfxParamPropGroupOpen", "kOfxParamPropGroupOpen")]),
+    )?;
 
     let expected = PropsetMetadataEntry {
         write: WriteSide::Plugin,
@@ -439,19 +497,17 @@ fn test_propset_ParamsGroup() {
         props_refs: BTreeSet::from(["ParamsCommon".to_owned()]),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propset_EffectDescriptor() {
-    let mut error = Error::default();
-
+fn test_propset_EffectDescriptor() -> Result<(), Box<Error>> {
     let actual = parse_propset(
         "EffectDescriptor",
-        lines(
-            r#"write: plugin
+        r#"
+    write: plugin
     props:
       - OfxPropType
       # …
@@ -459,9 +515,7 @@ fn test_propset_EffectDescriptor() {
       # …
       - OfxImageEffectPropCPURenderSupported | host_optional=true
       - OfxPluginPropFilePath | write=host"#,
-        ),
-        &mut error,
-        &HashMap::from([
+        HashMap::from([
             ("OfxPropType", "kOfxPropType"),
             ("OfxPropVersion", "kOfxPropVersion"),
             (
@@ -470,7 +524,7 @@ fn test_propset_EffectDescriptor() {
             ),
             ("OfxPluginPropFilePath", "kOfxPluginPropFilePath"),
         ]),
-    );
+    )?;
 
     let expected = PropsetMetadataEntry {
         write: WriteSide::Plugin,
@@ -501,32 +555,28 @@ fn test_propset_EffectDescriptor() {
         props_refs: Default::default(),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_propsetdef_ParamsValue() {
-    let mut error = Error::default();
-
+fn test_propsetdef_ParamsValue() -> Result<(), Box<Error>> {
     let actual = parse_propsetdef(
         "ParamsValue",
-        lines(
-            r#"- OfxParamPropDefault
+        r#"
+    - OfxParamPropDefault
     - OfxParamPropAnimates
     - OfxParamPropIsAnimating | write=host
     - OfxParamPropIsAutoKeying | write=host
     # …"#,
-        ),
-        &mut error,
-        &HashMap::from([
+        HashMap::from([
             ("OfxParamPropDefault", "kOfxParamPropDefault"),
             ("OfxParamPropAnimates", "kOfxParamPropAnimates"),
             ("OfxParamPropIsAnimating", "kOfxParamPropIsAnimating"),
             ("OfxParamPropIsAutoKeying", "kOfxParamPropIsAutoKeying"),
         ]),
-    );
+    )?;
 
     let expected = PropsetdefMetadataEntry {
         props: BTreeMap::from([
@@ -549,25 +599,21 @@ fn test_propsetdef_ParamsValue() {
         ]),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_actiondef_kOfxImageEffectActionGetOutputColourspace() {
-    let mut error = Error::default();
-
+fn test_actiondef_kOfxImageEffectActionGetOutputColourspace() -> Result<(), Box<Error>> {
     let actual = parse_actiondef(
         "kOfxImageEffectActionGetOutputColourspace",
-        lines(
-            r#"inArgs:
+        r#"
+    inArgs:
       - OfxImageClipPropPreferredColourspaces
     outArgs:
       - OfxImageClipPropColourspace"#,
-        ),
-        &mut error,
-        &HashMap::from([
+        HashMap::from([
             (
                 "OfxImageClipPropPreferredColourspaces",
                 "kOfxImageClipPropPreferredColourspaces",
@@ -577,63 +623,55 @@ fn test_actiondef_kOfxImageEffectActionGetOutputColourspace() {
                 "kOfxImageClipPropColourspace",
             ),
         ]),
-    );
+    )?;
 
     let expected = ActiondefMetadataEntry {
         in_args: BTreeSet::from(["kOfxImageClipPropPreferredColourspaces".to_owned()]),
         out_args: BTreeSet::from(["kOfxImageClipPropColourspace".to_owned()]),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_actiondef_kOfxActionLoad() {
-    let mut error = Error::default();
-
+fn test_actiondef_kOfxActionLoad() -> Result<(), Box<Error>> {
     let actual = parse_actiondef(
         "kOfxActionLoad",
-        lines(
-            r#"inArgs:
+        r#"
+    inArgs:
     outArgs:"#,
-        ),
-        &mut error,
-        &HashMap::from([]),
-    );
+        HashMap::from([]),
+    )?;
 
     let expected = ActiondefMetadataEntry {
         in_args: BTreeSet::from([]),
         out_args: BTreeSet::from([]),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_actiondef_kOfxActionBeginInstanceChanged() {
-    let mut error = Error::default();
-
+fn test_actiondef_kOfxActionBeginInstanceChanged() -> Result<(), Box<Error>> {
     let actual = parse_actiondef(
         "kOfxActionBeginInstanceChanged",
-        lines(
-            r#"inArgs:
+        r#"
+    inArgs:
       - OfxPropChangeReason
       - OfxImageEffectPropThumbnailRender
     outArgs: []"#,
-        ),
-        &mut error,
-        &HashMap::from([
+        HashMap::from([
             ("OfxPropChangeReason", "kOfxPropChangeReason"),
             (
                 "OfxImageEffectPropThumbnailRender",
                 "kOfxImageEffectPropThumbnailRender",
             ),
         ]),
-    );
+    )?;
 
     let expected = ActiondefMetadataEntry {
         in_args: BTreeSet::from([
@@ -643,28 +681,24 @@ fn test_actiondef_kOfxActionBeginInstanceChanged() {
         out_args: BTreeSet::from([]),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }
 
 #[test]
-fn test_actiondef_kOfxImageEffectActionGetRegionsOfInterest() {
-    let mut error = Error::default();
-
+fn test_actiondef_kOfxImageEffectActionGetRegionsOfInterest() -> Result<(), Box<Error>> {
     let actual = parse_actiondef(
         "kOfxImageEffectActionGetRegionsOfInterest",
-        lines(
-            r#"inArgs:
+        r#"
+    inArgs:
       - OfxPropTime
       - OfxImageEffectPropRenderScale
       - OfxImageEffectPropRegionOfInterest
       - OfxImageEffectPropThumbnailRender
     outArgs:
     # - OfxImageEffectClipPropRoI_ # with clip name"#,
-        ),
-        &mut error,
-        &HashMap::from([
+        HashMap::from([
             ("OfxPropTime", "kOfxPropTime"),
             (
                 "OfxImageEffectPropRenderScale",
@@ -679,7 +713,7 @@ fn test_actiondef_kOfxImageEffectActionGetRegionsOfInterest() {
                 "kOfxImageEffectPropThumbnailRender",
             ),
         ]),
-    );
+    )?;
 
     let expected = ActiondefMetadataEntry {
         in_args: BTreeSet::from([
@@ -691,7 +725,7 @@ fn test_actiondef_kOfxImageEffectActionGetRegionsOfInterest() {
         out_args: BTreeSet::from([]),
     };
 
-    pretty_assertions::assert_eq!(actual, Some(expected));
+    pretty_assertions::assert_eq!(actual, expected);
 
-    assert!(error.is_empty());
+    Ok(())
 }

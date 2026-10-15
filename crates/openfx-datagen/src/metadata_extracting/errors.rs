@@ -34,6 +34,10 @@ impl Error {
 
 #[derive(Debug, snafu::Snafu)]
 pub enum PropdefError {
+    PropdefSerdeSaphyrParse {
+        #[snafu(source)]
+        error: serde_saphyr::Error,
+    },
     /// e.g., `@propdef foo`, where there should not be a name after `@propdef`.
     PropdefWithName {
         name: String,
@@ -51,6 +55,8 @@ pub enum PropdefError {
     PropdefDuplicateField {
         field_name: String,
     },
+    PropdefNoType,
+    PropdefEnumAmongOtherTypes,
     PropdefEnumWithoutValuesField,
     PropdefNonEnumWithValuesField,
     PropdefUnsupportedValueLineInValues {
@@ -60,6 +66,10 @@ pub enum PropdefError {
 
 #[derive(Debug, snafu::Snafu)]
 pub enum PropsetError {
+    PropsetSerdeSaphyrParse {
+        #[snafu(source)]
+        error: serde_saphyr::Error,
+    },
     PropsetOnItem {
         item_cname: String,
     },
@@ -92,6 +102,10 @@ pub enum PropsetError {
 
 #[derive(Debug, snafu::Snafu)]
 pub enum PropsetdefError {
+    PropsetdefSerdeSaphyrParse {
+        #[snafu(source)]
+        error: serde_saphyr::Error,
+    },
     PropsetdefOnItem {
         item_cname: String,
     },
@@ -125,9 +139,23 @@ pub enum PropValueError {
 
 #[derive(Debug, snafu::Snafu)]
 pub enum ActiondefError {
-    ActiondefWithName { name: String },
-    ActiondefUndefinedInArg { stringname: String },
-    ActiondefInArgWithOptions { in_arg_cname: String },
-    ActiondefUndefinedOutArg { stringname: String },
-    ActiondefOutArgWithOptions { out_arg_cname: String },
+    ActiondefSerdeSaphyrParse {
+        #[snafu(source)]
+        error: serde_saphyr::Error,
+    },
+    ActiondefWithName {
+        name: String,
+    },
+    ActiondefUndefinedInArg {
+        stringname: String,
+    },
+    ActiondefInArgWithOptions {
+        in_arg_cname: String,
+    },
+    ActiondefUndefinedOutArg {
+        stringname: String,
+    },
+    ActiondefOutArgWithOptions {
+        out_arg_cname: String,
+    },
 }

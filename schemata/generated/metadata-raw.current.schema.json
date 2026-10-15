@@ -28,6 +28,7 @@
       }
     }
   },
+  "additionalProperties": false,
   "required": [
     "propdef_map",
     "propset_map",
@@ -69,6 +70,7 @@
           ]
         }
       },
+      "additionalProperties": false,
       "required": [
         "type",
         "dimension"
@@ -100,7 +102,6 @@
           "type": "object",
           "properties": {
             "one_of": {
-              "title": "Note",
               "type": "array",
               "items": {
                 "$ref": "#/$defs/StringEnumVariant"
@@ -121,11 +122,11 @@
     "PropdefTypeSimple": {
       "type": "string",
       "enum": [
-        "Int",
-        "Double",
-        "Bool",
-        "String",
-        "Pointer"
+        "int",
+        "double",
+        "bool",
+        "string",
+        "pointer"
       ]
     },
     "StringEnumVariant": {
@@ -218,6 +219,7 @@
           }
         }
       },
+      "additionalProperties": false,
       "required": [
         "write"
       ]
@@ -225,8 +227,8 @@
     "WriteSide": {
       "type": "string",
       "enum": [
-        "Host",
-        "Plugin"
+        "host",
+        "plugin"
       ]
     },
     "PropValue": {
@@ -245,7 +247,8 @@
             }
           ]
         }
-      }
+      },
+      "additionalProperties": false
     },
     "PropsetdefMetadataEntry": {
       "type": "object",
@@ -257,9 +260,7 @@
           }
         }
       },
-      "required": [
-        "props"
-      ]
+      "additionalProperties": false
     },
     "ActiondefMetadataEntry": {
       "type": "object",
@@ -278,7 +279,8 @@
             "type": "string"
           }
         }
-      }
+      },
+      "additionalProperties": false
     }
   }
 }

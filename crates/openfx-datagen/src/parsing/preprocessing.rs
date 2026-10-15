@@ -1,4 +1,4 @@
-use crate::parsing::utils::LinesEx;
+use crate::utils::LinesEx;
 
 /// Preprocess the input C code to make tree-sitter happy. Note that this is
 /// not a C preprocessor.

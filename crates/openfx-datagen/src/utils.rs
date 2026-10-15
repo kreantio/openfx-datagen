@@ -14,24 +14,50 @@ pub fn write_schema_json_pretty<W: std::io::Write, T: ?Sized + schemars::JsonSch
     Ok(())
 }
 
-pub struct SignificantLines<'a>(std::str::Lines<'a>);
+pub struct LinesEx<'a> {
+    text: &'a str,
+    offset: usize,
+}
 
-impl<'a> SignificantLines<'a> {
-    pub fn new(lines: std::str::Lines<'a>) -> Self {
-        Self(lines)
+pub struct LineEx<'a> {
+    pub content: &'a str,
+    pub start_offset: usize,
+}
+
+impl<'a> LinesEx<'a> {
+    pub fn new(content: &'a str) -> Self {
+        Self {
+            text: content,
+            offset: 0,
+        }
     }
 }
 
-impl<'a> std::iter::Iterator for SignificantLines<'a> {
-    type Item = &'a str;
+impl<'a> Iterator for LinesEx<'a> {
+    type Item = LineEx<'a>;
 
+    /// Author: GitHub Copilot's tab completion
     fn next(&mut self) -> Option<Self::Item> {
-        for line in self.0.by_ref() {
-            let line = line.trim();
-            if !line.is_empty() && !line.starts_with('#') {
-                return Some(line);
-            }
+        if self.offset >= self.text.len() {
+            return None;
         }
-        None
+        let remaining_text = &self.text[self.offset..];
+        if let Some(pos) = remaining_text.find('\n') {
+            let mut line = &remaining_text[..pos];
+            line = line.strip_suffix('\r').unwrap_or(line);
+            let start_offset = self.offset;
+            self.offset += pos + 1;
+            Some(LineEx {
+                content: line,
+                start_offset,
+            })
+        } else {
+            let start_offset = self.offset;
+            self.offset = self.text.len();
+            Some(LineEx {
+                content: remaining_text,
+                start_offset,
+            })
+        }
     }
 }
