@@ -496,6 +496,42 @@ fn test_propset_InteractDescriptor() -> Result<(), Box<Error>> {
 }
 
 #[test]
+fn test_propset_InteractInstance() -> Result<(), Box<Error>> {
+    let actual = parse_propset(
+        "InteractInstance",
+        r#"
+    write: host
+    props:
+      - OfxPropEffectInstance
+      - OfxPropInstanceData | write=all
+      # …"#,
+        HashMap::from([
+            ("OfxPropEffectInstance", "kOfxPropEffectInstance"),
+            ("OfxPropInstanceData", "kOfxPropInstanceData"),
+        ]),
+    )?;
+
+    let expected = PropsetMetadataEntry {
+        write: WriteSide::Host,
+        props: BTreeMap::from([
+            ("kOfxPropEffectInstance".to_owned(), PropValue::default()),
+            (
+                "kOfxPropInstanceData".to_owned(),
+                PropValue {
+                    write: Some(WriteSide::All),
+                    ..Default::default()
+                },
+            ),
+        ]),
+        props_refs: Default::default(),
+    };
+
+    pretty_assertions::assert_eq!(actual, expected);
+
+    Ok(())
+}
+
+#[test]
 fn test_propset_ParamsGroup() -> Result<(), Box<Error>> {
     let actual = parse_propset(
         "ParamsGroup",
@@ -642,8 +678,14 @@ fn test_actiondef_kOfxImageEffectActionGetOutputColourspace() -> Result<(), Box<
     )?;
 
     let expected = ActiondefMetadataEntry {
-        in_args: BTreeSet::from(["kOfxImageClipPropPreferredColourspaces".to_owned()]),
-        out_args: BTreeSet::from(["kOfxImageClipPropColourspace".to_owned()]),
+        in_args: BTreeMap::from([(
+            "kOfxImageClipPropPreferredColourspaces".to_owned(),
+            PropValue::default(),
+        )]),
+        out_args: BTreeMap::from([(
+            "kOfxImageClipPropColourspace".to_owned(),
+            PropValue::default(),
+        )]),
     };
 
     pretty_assertions::assert_eq!(actual, expected);
@@ -662,8 +704,8 @@ fn test_actiondef_kOfxActionLoad() -> Result<(), Box<Error>> {
     )?;
 
     let expected = ActiondefMetadataEntry {
-        in_args: BTreeSet::from([]),
-        out_args: BTreeSet::from([]),
+        in_args: BTreeMap::from([]),
+        out_args: BTreeMap::from([]),
     };
 
     pretty_assertions::assert_eq!(actual, expected);
@@ -678,7 +720,7 @@ fn test_actiondef_kOfxActionBeginInstanceChanged() -> Result<(), Box<Error>> {
         r#"
     inArgs:
       - OfxPropChangeReason
-      - OfxImageEffectPropThumbnailRender
+      - OfxImageEffectPropThumbnailRender | optional
     outArgs: []"#,
         HashMap::from([
             ("OfxPropChangeReason", "kOfxPropChangeReason"),
@@ -690,11 +732,17 @@ fn test_actiondef_kOfxActionBeginInstanceChanged() -> Result<(), Box<Error>> {
     )?;
 
     let expected = ActiondefMetadataEntry {
-        in_args: BTreeSet::from([
-            "kOfxPropChangeReason".to_owned(),
-            "kOfxImageEffectPropThumbnailRender".to_owned(),
+        in_args: BTreeMap::from([
+            ("kOfxPropChangeReason".to_owned(), PropValue::default()),
+            (
+                "kOfxImageEffectPropThumbnailRender".to_owned(),
+                PropValue {
+                    host_optional: true,
+                    ..Default::default()
+                },
+            ),
         ]),
-        out_args: BTreeSet::from([]),
+        out_args: BTreeMap::from([]),
     };
 
     pretty_assertions::assert_eq!(actual, expected);
@@ -732,13 +780,22 @@ fn test_actiondef_kOfxImageEffectActionGetRegionsOfInterest() -> Result<(), Box<
     )?;
 
     let expected = ActiondefMetadataEntry {
-        in_args: BTreeSet::from([
-            "kOfxPropTime".to_owned(),
-            "kOfxImageEffectPropRenderScale".to_owned(),
-            "kOfxImageEffectPropRegionOfInterest".to_owned(),
-            "kOfxImageEffectPropThumbnailRender".to_owned(),
+        in_args: BTreeMap::from([
+            ("kOfxPropTime".to_owned(), PropValue::default()),
+            (
+                "kOfxImageEffectPropRenderScale".to_owned(),
+                PropValue::default(),
+            ),
+            (
+                "kOfxImageEffectPropRegionOfInterest".to_owned(),
+                PropValue::default(),
+            ),
+            (
+                "kOfxImageEffectPropThumbnailRender".to_owned(),
+                PropValue::default(),
+            ),
         ]),
-        out_args: BTreeSet::from([]),
+        out_args: BTreeMap::from([]),
     };
 
     pretty_assertions::assert_eq!(actual, expected);

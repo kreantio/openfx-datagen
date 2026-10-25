@@ -227,6 +227,7 @@
     "WriteSide": {
       "type": "string",
       "enum": [
+        "all",
         "host",
         "plugin"
       ]
@@ -266,17 +267,15 @@
       "type": "object",
       "properties": {
         "in_args": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string"
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/PropValue"
           }
         },
         "out_args": {
-          "type": "array",
-          "uniqueItems": true,
-          "items": {
-            "type": "string"
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/PropValue"
           }
         }
       },

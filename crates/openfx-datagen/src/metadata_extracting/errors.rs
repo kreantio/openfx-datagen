@@ -106,11 +106,11 @@ pub enum PropsetdefError {
 pub enum PropValueError {
     PropValueUnexpectedOption {
         option_name: String,
-        option_value: String,
+        option_value: Option<String>,
     },
     PropValueUnexpectedOptionValue {
         option_name: String,
-        option_value: String,
+        option_value: Option<String>,
     },
     PropValueDuplicateOption {
         option_name: String,
@@ -129,13 +129,13 @@ pub enum ActiondefError {
     ActiondefUndefinedInArg {
         stringname: String,
     },
-    ActiondefInArgWithOptions {
-        in_arg_cname: String,
-    },
     ActiondefUndefinedOutArg {
         stringname: String,
     },
-    ActiondefOutArgWithOptions {
-        out_arg_cname: String,
+    ActiondefPropValueError {
+        is_in_arg: bool,
+        prop_cname: String,
+        #[snafu(source)]
+        error: PropValueError,
     },
 }
