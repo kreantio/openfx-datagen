@@ -262,10 +262,10 @@ impl PropsetdefMetadataEntry {
 )]
 #[serde(deny_unknown_fields)]
 pub struct ActiondefMetadataEntry {
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub in_args: BTreeSet<String>,
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
-    pub out_args: BTreeSet<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub in_args: BTreeMap<String, PropValue>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub out_args: BTreeMap<String, PropValue>,
 }
 
 impl ActiondefMetadataEntry {
@@ -281,8 +281,8 @@ impl ActiondefMetadataEntry {
             };
         }
 
-        let mut in_args: BTreeSet<String> = BTreeSet::new();
-        let mut out_args: BTreeSet<String> = BTreeSet::new();
+        let mut in_args: BTreeMap<String, PropValue> = BTreeMap::new();
+        let mut out_args: BTreeMap<String, PropValue> = BTreeMap::new();
 
         for (is_in, args, raw_args) in [
             (true, &mut in_args, raw.in_args),
@@ -303,19 +303,21 @@ impl ActiondefMetadataEntry {
                     }
                 };
 
-                if !opts.is_empty() {
-                    if is_in {
-                        err_continue!(ActiondefError::ActiondefInArgWithOptions {
-                            in_arg_cname: prop_cname.to_owned(),
-                        });
-                    } else {
-                        err_continue!(ActiondefError::ActiondefOutArgWithOptions {
-                            out_arg_cname: prop_cname.to_owned(),
-                        });
+                let value = match PropValue::try_from_options(opts) {
+                    Ok(value) => value,
+                    Err(errors) => {
+                        for error in errors {
+                            err_continue!(ActiondefError::ActiondefPropValueError {
+                                is_in_arg: is_in,
+                                prop_cname: prop_cname.to_owned(),
+                                error,
+                            });
+                        }
+                        continue;
                     }
-                }
+                };
 
-                args.insert(prop_cname.to_owned());
+                args.insert(prop_cname.to_owned(), value);
             }
         }
 
@@ -471,6 +473,7 @@ impl PropdefDimension {
 )]
 #[serde(rename_all = "snake_case")]
 pub enum WriteSide {
+    All,
     Host,
     Plugin,
 }
@@ -478,6 +481,7 @@ pub enum WriteSide {
 impl WriteSide {
     pub fn try_from(value: &str) -> Option<Self> {
         match value {
+            "all" => Some(Self::All),
             "host" => Some(Self::Host),
             "plugin" => Some(Self::Plugin),
             _ => None,
@@ -497,7 +501,9 @@ pub struct PropValue {
 }
 
 impl PropValue {
-    pub fn try_from_options(opts: HashMap<&str, &str>) -> Result<PropValue, Vec<PropValueError>> {
+    pub fn try_from_options(
+        opts: HashMap<&str, Option<&str>>,
+    ) -> Result<PropValue, Vec<PropValueError>> {
         let mut value = Self::default();
         let mut errors = vec![];
 
@@ -510,10 +516,27 @@ impl PropValue {
                         });
                         continue;
                     }
-                    if opt_value != "true" {
+                    if opt_value != Some("true") {
                         errors.push(PropValueError::PropValueUnexpectedOptionValue {
                             option_name: "host_optional".to_owned(),
-                            option_value: opt_value.to_owned(),
+                            option_value: opt_value.map(|s| s.to_owned()),
+                        });
+                        continue;
+                    }
+                    value.host_optional = true;
+                }
+                // `optional` expands to `host_optional=true`
+                "optional" => {
+                    if value.host_optional {
+                        errors.push(PropValueError::PropValueDuplicateOption {
+                            option_name: "optional".to_owned(),
+                        });
+                        continue;
+                    }
+                    if !opt_value.is_none() {
+                        errors.push(PropValueError::PropValueUnexpectedOptionValue {
+                            option_name: "optional".to_owned(),
+                            option_value: opt_value.map(|s| s.to_owned()),
                         });
                         continue;
                     }
@@ -526,12 +549,19 @@ impl PropValue {
                         });
                         continue;
                     }
+                    let Some(opt_value) = opt_value else {
+                        errors.push(PropValueError::PropValueUnexpectedOptionValue {
+                            option_name: "write".to_owned(),
+                            option_value: None,
+                        });
+                        continue;
+                    };
                     value.write = match WriteSide::try_from(opt_value) {
                         Some(write_side) => Some(write_side),
                         None => {
                             errors.push(PropValueError::PropValueUnexpectedOptionValue {
                                 option_name: "write".to_owned(),
-                                option_value: opt_value.to_owned(),
+                                option_value: Some(opt_value.to_owned()),
                             });
                             continue;
                         }
@@ -540,7 +570,7 @@ impl PropValue {
                 _ => {
                     errors.push(PropValueError::PropValueUnexpectedOption {
                         option_name: opt_name.to_owned(),
-                        option_value: opt_value.to_owned(),
+                        option_value: opt_value.map(|s| s.to_owned()),
                     });
                     continue;
                 }
@@ -555,22 +585,25 @@ impl PropValue {
     }
 }
 
-fn parse_prop_item(prop_item: &str) -> (&str, HashMap<&str, &str>) {
+fn parse_prop_item(prop_item: &str) -> (&str, HashMap<&str, Option<&str>>) {
     let (stringname, rest) = prop_item.split_once("|").unwrap_or((prop_item, ""));
     let stringname = stringname.trim();
     if rest.is_empty() {
         return (stringname, HashMap::new());
     }
 
-    let mut opts: HashMap<&str, &str> = HashMap::new();
+    let mut opts: HashMap<&str, Option<&str>> = HashMap::new();
 
     for opt_str in rest.split(",") {
         let opt_str = opt_str.trim();
         if opt_str.is_empty() {
             continue;
         }
-        let (key, value) = opt_str.split_once("=").unwrap_or((opt_str, ""));
-        opts.insert(key.trim(), value.trim());
+        let Some((key, value)) = opt_str.split_once("=") else {
+            opts.insert(opt_str.trim(), None);
+            continue;
+        };
+        opts.insert(key.trim(), Some(value.trim()));
     }
 
     (stringname, opts)
